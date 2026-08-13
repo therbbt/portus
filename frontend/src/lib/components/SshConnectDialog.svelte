@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import type { SshConnectOptions } from "../bridge";
+  import type { SshConnectOptions, SaveRequest } from "../bridge";
 
   const dispatch = createEventDispatcher<{
-    connect: SshConnectOptions;
+    connect: { options: SshConnectOptions; save: SaveRequest | null };
     cancel: void;
   }>();
 
@@ -14,13 +14,16 @@
   let password = "";
   let keyPath = "";
   let passphrase = "";
+  let saveConnection = false;
+  let saveName = "";
 
   let panelEl: HTMLDivElement;
 
   $: canSubmit =
     host.trim().length > 0 &&
     username.trim().length > 0 &&
-    (authMethod === "password" ? password.length > 0 : keyPath.trim().length > 0);
+    (authMethod === "password" ? password.length > 0 : keyPath.trim().length > 0) &&
+    (!saveConnection || saveName.trim().length > 0);
 
   function submit() {
     if (!canSubmit) return;
@@ -33,7 +36,7 @@
           ? { type: "password", password }
           : { type: "privateKey", path: keyPath.trim(), passphrase: passphrase || null },
     };
-    dispatch("connect", options);
+    dispatch("connect", { options, save: saveConnection ? { name: saveName.trim() } : null });
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -116,7 +119,22 @@
       </label>
     {/if}
 
-    <p class="hint">Credentials aren't saved — you'll be asked again next time.</p>
+    <label class="checkbox-field">
+      <input type="checkbox" bind:checked={saveConnection} />
+      <span>Save this connection</span>
+    </label>
+    {#if saveConnection}
+      <label class="field">
+        <span>Name</span>
+        <input type="text" bind:value={saveName} placeholder={username && host ? `${username}@${host}` : "My server"} />
+      </label>
+    {/if}
+
+    <p class="hint">
+      {saveConnection
+        ? "The credential above goes in your OS keychain, not this config file."
+        : "Credentials aren't saved — you'll be asked again next time."}
+    </p>
 
     <div class="actions">
       <button class="btn" on:click={() => dispatch("cancel")}>Cancel</button>
@@ -205,6 +223,19 @@
   .toggle-btn.active {
     background: var(--surface-3);
     color: var(--fg-primary);
+  }
+
+  .checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--fg-secondary);
+    cursor: pointer;
+  }
+  .checkbox-field input {
+    padding: 0;
+    accent-color: var(--accent);
   }
 
   .hint {

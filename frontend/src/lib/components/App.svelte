@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import TitleBar from "./TitleBar.svelte";
   import HostTree from "./HostTree.svelte";
   import TabStrip from "./TabStrip.svelte";
@@ -6,7 +7,16 @@
   import EmptyMainArea from "./EmptyMainArea.svelte";
   import SshConnectDialog from "./SshConnectDialog.svelte";
   import SerialConnectDialog from "./SerialConnectDialog.svelte";
-  import type { Protocol, SessionState, SessionOptions, SshConnectOptions, SerialConnectOptions } from "../bridge";
+  import type {
+    Protocol,
+    SessionState,
+    SessionOptions,
+    SshConnectOptions,
+    SerialConnectOptions,
+    SaveRequest,
+    Host,
+  } from "../bridge";
+  import { getConfig, saveHost, deleteHost, resolveHostSecret } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
 
   interface Tab {
@@ -26,6 +36,16 @@
   let activeTabId: string | null = null;
   let showSshDialog = false;
   let showSerialDialog = false;
+  let hosts: Host[] = [];
+
+  onMount(async () => {
+    try {
+      const config = await getConfig();
+      hosts = config.hosts;
+    } catch {
+      // No persisted config yet (first launch) — the rail just stays empty.
+    }
+  });
 
   function newShellTab() {
     const id = crypto.randomUUID();
@@ -43,42 +63,83 @@
     activeTabId = id;
   }
 
+  function openTab(protocol: Protocol, title: string, options: SessionOptions) {
+    const id = crypto.randomUUID();
+    const tab: Tab = { id, protocol, title, state: "connecting", sessionId: null, options };
+    tabs = [...tabs, tab];
+    activeTabId = id;
+  }
+
   function openSshDialog() {
     showSshDialog = true;
   }
 
-  function onSshConnect(options: SshConnectOptions) {
+  async function onSshConnect(detail: { options: SshConnectOptions; save: SaveRequest | null }) {
     showSshDialog = false;
-    const id = crypto.randomUUID();
-    const tab: Tab = {
-      id,
-      protocol: "ssh",
-      title: `${options.username}@${options.host}`,
-      state: "connecting",
-      sessionId: null,
-      options,
-    };
-    tabs = [...tabs, tab];
-    activeTabId = id;
+    const { options, save } = detail;
+    openTab("ssh", `${options.username}@${options.host}`, options);
+
+    if (save) {
+      const config = await saveHost({
+        name: save.name,
+        protocol: "ssh",
+        address: options.host,
+        port: options.port,
+        username: options.username,
+        auth:
+          options.auth.type === "password"
+            ? { type: "password", password: options.auth.password }
+            : { type: "privateKey", path: options.auth.path, passphrase: options.auth.passphrase },
+      });
+      hosts = config.hosts;
+    }
   }
 
   function openSerialDialog() {
     showSerialDialog = true;
   }
 
-  function onSerialConnect(options: SerialConnectOptions) {
+  async function onSerialConnect(detail: { options: SerialConnectOptions; save: SaveRequest | null }) {
     showSerialDialog = false;
-    const id = crypto.randomUUID();
-    const tab: Tab = {
-      id,
-      protocol: "serial",
-      title: options.portName,
-      state: "connecting",
-      sessionId: null,
-      options,
-    };
-    tabs = [...tabs, tab];
-    activeTabId = id;
+    const { options, save } = detail;
+    openTab("serial", options.portName, options);
+
+    if (save) {
+      const config = await saveHost({
+        name: save.name,
+        protocol: "serial",
+        address: options.portName,
+        baudRate: options.baudRate,
+        auth: { type: "none" },
+      });
+      hosts = config.hosts;
+    }
+  }
+
+  async function connectToSavedHost(host: Host) {
+    const secret = await resolveHostSecret(host.id).catch(() => null);
+
+    if (host.protocol === "ssh") {
+      const auth: SshConnectOptions["auth"] =
+        host.auth.type === "privateKey"
+          ? { type: "privateKey", path: host.auth.path ?? "", passphrase: secret }
+          : { type: "password", password: secret ?? "" };
+      const options: SshConnectOptions = {
+        host: host.address,
+        port: host.port ?? undefined,
+        username: host.username ?? "",
+        auth,
+      };
+      openTab("ssh", host.name, options);
+    } else if (host.protocol === "serial") {
+      const options: SerialConnectOptions = { portName: host.address, baudRate: host.baudRate ?? undefined };
+      openTab("serial", host.name, options);
+    }
+  }
+
+  async function onDeleteHost(host: Host) {
+    const config = await deleteHost(host.id);
+    hosts = config.hosts;
   }
 
   function selectTab(id: string) {
@@ -117,7 +178,14 @@
 <div class="app-shell">
   <TitleBar />
   <div class="body">
-    <HostTree on:newShell={newShellTab} on:newSsh={openSshDialog} on:newSerial={openSerialDialog} />
+    <HostTree
+      {hosts}
+      on:newShell={newShellTab}
+      on:newSsh={openSshDialog}
+      on:newSerial={openSerialDialog}
+      on:connect={(e) => connectToSavedHost(e.detail)}
+      on:deleteHost={(e) => onDeleteHost(e.detail)}
+    />
     <div class="main">
       <TabStrip
         tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}

@@ -33,6 +33,13 @@ export interface SerialConnectOptions {
   baudRate?: number;
 }
 
+/** Emitted alongside a connect dialog's `connect` event when the user
+ * checked "save this connection" — just the display name, since everything
+ * else needed to build the saved `Host` is already in the connect options. */
+export interface SaveRequest {
+  name: string;
+}
+
 export type SessionOptions = SshConnectOptions | SerialConnectOptions | undefined;
 
 export async function openSession(protocol: Protocol, options?: SessionOptions): Promise<string> {
@@ -41,6 +48,81 @@ export async function openSession(protocol: Protocol, options?: SessionOptions):
 
 export async function listSerialPorts(): Promise<string[]> {
   return invoke<string[]>("list_serial_ports");
+}
+
+// --- Saved hosts -----------------------------------------------------------
+// Mirrors portus-core's Config/Host/AuthMethod. AuthMethodDto's handle
+// fields are opaque keychain references, not secrets — never used directly
+// as a password. Call resolveHostSecret() to get the real value back.
+
+export interface AuthMethodDto {
+  type: "none" | "password" | "privateKey";
+  credentialHandle?: string;
+  path?: string;
+  passphraseHandle?: string | null;
+}
+
+export interface Host {
+  id: string;
+  name: string;
+  groupId?: string | null;
+  protocol: Protocol;
+  address: string;
+  port?: number | null;
+  username?: string | null;
+  baudRate?: number | null;
+  auth: AuthMethodDto;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  collapsed: boolean;
+}
+
+export interface PortusConfig {
+  schemaVersion: number;
+  groups: Group[];
+  hosts: Host[];
+  settings: { terminalFontFamily: string; terminalFontSize: number };
+}
+
+export async function getConfig(): Promise<PortusConfig> {
+  return invoke<PortusConfig>("get_config");
+}
+
+/** What save_host expects for the auth half — the raw secret, not a handle. */
+export type AuthInput =
+  | { type: "none" }
+  | { type: "password"; password: string }
+  | { type: "privateKey"; path: string; passphrase?: string | null };
+
+export interface SaveHostInput {
+  id?: string | null;
+  name: string;
+  groupId?: string | null;
+  protocol: Protocol;
+  address: string;
+  port?: number | null;
+  username?: string | null;
+  baudRate?: number | null;
+  auth: AuthInput;
+}
+
+export async function saveHost(input: SaveHostInput): Promise<PortusConfig> {
+  return invoke<PortusConfig>("save_host", { ...input });
+}
+
+export async function deleteHost(hostId: string): Promise<PortusConfig> {
+  return invoke<PortusConfig>("delete_host", { hostId });
+}
+
+/** Pulls a saved host's password/passphrase back out of the keychain. `null`
+ * if the host has no stored credential (AuthMethod::None, or a private key
+ * with no saved passphrase). */
+export async function resolveHostSecret(hostId: string): Promise<string | null> {
+  return invoke<string | null>("resolve_host_secret", { hostId });
 }
 
 export async function writeSession(sessionId: string, data: Uint8Array): Promise<void> {
