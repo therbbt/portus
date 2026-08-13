@@ -78,6 +78,7 @@
           role="button"
           tabindex="0"
           aria-label="Close tab"
+          title="Close tab"
           on:click|stopPropagation={() => dispatch("close", { id: tab.id })}
           on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("close", { id: tab.id })}
         >
@@ -86,7 +87,7 @@
       </div>
     {/each}
   </div>
-  <button class="new-tab" aria-label="New tab" on:click={() => dispatch("new")}>+</button>
+  <button class="new-tab" aria-label="New tab" title="New local shell tab" on:click={() => dispatch("new")}>+</button>
 </div>
 
 <style>
