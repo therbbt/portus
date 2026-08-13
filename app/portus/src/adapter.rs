@@ -27,10 +27,18 @@ pub struct AppState {
 impl AppState {
     /// Construct a `Session` for `protocol`, hand it its own tokio task, and
     /// return the id the frontend will use to address it from now on.
-    pub fn open(&self, protocol: &str, app: AppHandle) -> Result<String, String> {
+    /// `options` carries protocol-specific connect parameters (e.g. host/
+    /// auth for SSH) as JSON — this function is the only place that knows
+    /// how to turn that JSON into a concrete `Session`.
+    pub fn open(&self, protocol: &str, options: serde_json::Value, app: AppHandle) -> Result<String, String> {
         let session: Box<dyn Session> = match protocol {
             "echo" => Box::new(portus_core::echo::EchoSession::default()),
             "shell" => Box::new(portus_shell::ShellSession::default()),
+            "ssh" => {
+                let opts: portus_ssh::SshConnectOptions =
+                    serde_json::from_value(options).map_err(|e| format!("invalid ssh options: {e}"))?;
+                Box::new(portus_ssh::SshSession::new(opts))
+            }
             other => return Err(format!("unknown protocol: {other}")),
         };
 

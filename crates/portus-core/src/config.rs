@@ -97,9 +97,16 @@ pub enum ConfigError {
     Json(#[from] serde_json::Error),
 }
 
-pub fn config_path() -> Result<PathBuf, ConfigError> {
+/// The per-OS config directory Portus owns. Protocol crates that need their
+/// own on-disk state (e.g. `portus-ssh`'s known-hosts store) get a sibling
+/// file in here rather than each inventing their own location.
+pub fn config_dir() -> Result<PathBuf, ConfigError> {
     let dirs = ProjectDirs::from("com", "portus", "Portus").ok_or(ConfigError::NoConfigDir)?;
-    Ok(dirs.config_dir().join("config.json"))
+    Ok(dirs.config_dir().to_path_buf())
+}
+
+pub fn config_path() -> Result<PathBuf, ConfigError> {
+    Ok(config_dir()?.join("config.json"))
 }
 
 pub fn load() -> Result<Config, ConfigError> {

@@ -4,7 +4,8 @@
   import TabStrip from "./TabStrip.svelte";
   import Terminal from "./Terminal.svelte";
   import EmptyMainArea from "./EmptyMainArea.svelte";
-  import type { Protocol, SessionState } from "../bridge";
+  import SshConnectDialog from "./SshConnectDialog.svelte";
+  import type { Protocol, SessionState, SshConnectOptions } from "../bridge";
 
   interface Tab {
     id: string; // local tab id, stable across the session's lifetime
@@ -12,11 +13,13 @@
     title: string;
     state: SessionState;
     sessionId: string | null;
+    options?: SshConnectOptions;
   }
 
   let tabs: Tab[] = [];
   let activeTabId: string | null = null;
   let nextTabNum = 1;
+  let showSshDialog = false;
 
   function newShellTab() {
     const id = crypto.randomUUID();
@@ -26,6 +29,25 @@
       title: `Local Shell ${nextTabNum++}`,
       state: "connecting",
       sessionId: null,
+    };
+    tabs = [...tabs, tab];
+    activeTabId = id;
+  }
+
+  function openSshDialog() {
+    showSshDialog = true;
+  }
+
+  function onSshConnect(options: SshConnectOptions) {
+    showSshDialog = false;
+    const id = crypto.randomUUID();
+    const tab: Tab = {
+      id,
+      protocol: "ssh",
+      title: `${options.username}@${options.host}`,
+      state: "connecting",
+      sessionId: null,
+      options,
     };
     tabs = [...tabs, tab];
     activeTabId = id;
@@ -48,6 +70,10 @@
     tabs = tabs.map((t) => (t.id === id ? { ...t, state } : t));
   }
 
+  function onTitle(id: string, title: string) {
+    tabs = tabs.map((t) => (t.id === id ? { ...t, title } : t));
+  }
+
   function onClosed(id: string) {
     closeTab(id);
   }
@@ -56,7 +82,7 @@
 <div class="app-shell">
   <TitleBar />
   <div class="body">
-    <HostTree on:newShell={newShellTab} />
+    <HostTree on:newShell={newShellTab} on:newSsh={openSshDialog} />
     <div class="main">
       <TabStrip
         tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
@@ -69,17 +95,23 @@
         {#each tabs as tab (tab.id)}
           <Terminal
             protocol={tab.protocol}
+            options={tab.options}
             active={tab.id === activeTabId}
             on:state={(e) => onState(tab.id, e.detail)}
+            on:title={(e) => onTitle(tab.id, e.detail.title)}
             on:closed={() => onClosed(tab.id)}
           />
         {/each}
         {#if tabs.length === 0}
-          <EmptyMainArea on:newShell={newShellTab} />
+          <EmptyMainArea on:newShell={newShellTab} on:newSsh={openSshDialog} />
         {/if}
       </div>
     </div>
   </div>
+
+  {#if showSshDialog}
+    <SshConnectDialog on:connect={(e) => onSshConnect(e.detail)} on:cancel={() => (showSshDialog = false)} />
+  {/if}
 </div>
 
 <style>
@@ -87,6 +119,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
   .body {
     flex: 1;
