@@ -28,10 +28,19 @@ export interface SshConnectOptions {
   auth: SshAuth;
 }
 
-export type SessionOptions = SshConnectOptions | undefined;
+export interface SerialConnectOptions {
+  portName: string;
+  baudRate?: number;
+}
+
+export type SessionOptions = SshConnectOptions | SerialConnectOptions | undefined;
 
 export async function openSession(protocol: Protocol, options?: SessionOptions): Promise<string> {
   return invoke<string>("session_open", { protocol, options: options ?? null });
+}
+
+export async function listSerialPorts(): Promise<string[]> {
+  return invoke<string[]>("list_serial_ports");
 }
 
 export async function writeSession(sessionId: string, data: Uint8Array): Promise<void> {

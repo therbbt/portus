@@ -15,6 +15,7 @@ pub fn run() {
             commands::session_close,
             commands::get_config,
             commands::save_config,
+            commands::list_serial_ports,
         ])
         .run(tauri::generate_context!())
         .expect("error while running portus");

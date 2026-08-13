@@ -39,6 +39,11 @@ impl AppState {
                     serde_json::from_value(options).map_err(|e| format!("invalid ssh options: {e}"))?;
                 Box::new(portus_ssh::SshSession::new(opts))
             }
+            "serial" => {
+                let opts: portus_serial::SerialConnectOptions =
+                    serde_json::from_value(options).map_err(|e| format!("invalid serial options: {e}"))?;
+                Box::new(portus_serial::SerialSession::new(opts))
+            }
             other => return Err(format!("unknown protocol: {other}")),
         };
 
