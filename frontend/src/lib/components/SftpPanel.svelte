@@ -232,9 +232,9 @@
 <style>
   .sftp-panel {
     position: fixed;
-    top: var(--titlebar-height);
-    right: 0;
-    bottom: 0;
+    top: calc(var(--titlebar-height) + var(--window-shadow-margin));
+    right: var(--window-shadow-margin);
+    bottom: var(--window-shadow-margin);
     width: min(400px, 90vw);
     background: var(--surface-1);
     box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
