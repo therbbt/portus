@@ -13,15 +13,18 @@
     type Protocol,
     type SessionEvent,
     type SessionState,
+    type SessionOptions,
   } from "../bridge";
 
   export let protocol: Protocol = "shell";
+  export let options: SessionOptions = undefined;
   export let active = true;
 
   const dispatch = createEventDispatcher<{
     state: SessionState;
     closed: { reason: string | null };
     ready: { sessionId: string };
+    title: { title: string };
   }>();
 
   let container: HTMLDivElement;
@@ -44,6 +47,9 @@
         break;
       case "state_changed":
         dispatch("state", event.state);
+        break;
+      case "title_changed":
+        dispatch("title", { title: event.title });
         break;
       case "closed":
         dispatch("closed", { reason: event.reason });
@@ -75,7 +81,7 @@
     term.open(container);
     fitAddon.fit();
 
-    sessionId = await openSession(protocol);
+    sessionId = await openSession(protocol, options);
     dispatch("ready", { sessionId });
 
     sub = await subscribeSession(sessionId, handleEvent);

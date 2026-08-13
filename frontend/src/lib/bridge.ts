@@ -17,8 +17,21 @@ export type SessionEvent =
   | { type: "closed"; reason: string | null }
   | { type: "error"; message: string };
 
-export async function openSession(protocol: Protocol): Promise<string> {
-  return invoke<string>("session_open", { protocol });
+export type SshAuth =
+  | { type: "password"; password: string }
+  | { type: "privateKey"; path: string; passphrase?: string | null };
+
+export interface SshConnectOptions {
+  host: string;
+  port?: number;
+  username: string;
+  auth: SshAuth;
+}
+
+export type SessionOptions = SshConnectOptions | undefined;
+
+export async function openSession(protocol: Protocol, options?: SessionOptions): Promise<string> {
+  return invoke<string>("session_open", { protocol, options: options ?? null });
 }
 
 export async function writeSession(sessionId: string, data: Uint8Array): Promise<void> {
