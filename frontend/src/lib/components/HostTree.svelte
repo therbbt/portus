@@ -1,10 +1,28 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import RingMark from "./RingMark.svelte";
+  import type { Host } from "../bridge";
 
-  export let hosts: Array<{ id: string; name: string }> = [];
+  export let hosts: Host[] = [];
 
-  const dispatch = createEventDispatcher<{ newShell: void; newSsh: void; newSerial: void }>();
+  const dispatch = createEventDispatcher<{
+    newShell: void;
+    newSsh: void;
+    newSerial: void;
+    connect: Host;
+    deleteHost: Host;
+  }>();
+
+  // "echo" is a debug-only session kind, never a real saved host's
+  // protocol — included here only so this satisfies the shared `Protocol` type.
+  const protocolLabel: Record<Host["protocol"], string> = {
+    ssh: "SSH",
+    serial: "Serial",
+    shell: "Shell",
+    telnet: "Telnet",
+    rdp: "RDP",
+    echo: "Echo",
+  };
 </script>
 
 <aside class="rail">
@@ -16,12 +34,27 @@
     <div class="empty-state">
       <RingMark size={40} />
       <p class="empty-title">No saved hosts yet</p>
-      <p class="empty-subtitle">Hosts you add will show up here, grouped and collapsible.</p>
+      <p class="empty-subtitle">Save a connection from the SSH or serial dialog and it'll show up here.</p>
     </div>
   {:else}
     <ul class="host-list">
       {#each hosts as host (host.id)}
-        <li class="host-row">{host.name}</li>
+        <li class="host-row">
+          <button class="host-main" on:click={() => dispatch("connect", host)}>
+            <span class="host-name">{host.name}</span>
+            <span class="host-meta">{protocolLabel[host.protocol]} · {host.address}</span>
+          </button>
+          <span
+            class="host-delete"
+            role="button"
+            tabindex="0"
+            aria-label={`Delete ${host.name}`}
+            on:click|stopPropagation={() => dispatch("deleteHost", host)}
+            on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteHost", host)}
+          >
+            ×
+          </span>
+        </li>
       {/each}
     </ul>
   {/if}
@@ -88,14 +121,53 @@
     flex: 1;
   }
   .host-row {
-    padding: 0.22rem 0.4rem;
+    display: flex;
+    align-items: center;
     border-radius: var(--radius-sm);
-    color: var(--fg-primary);
-    cursor: pointer;
-    font-size: 0.78rem;
   }
   .host-row:hover {
     background: var(--surface-3);
+  }
+  .host-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0.3rem 0.4rem;
+    background: transparent;
+    border: none;
+    color: var(--fg-primary);
+    cursor: pointer;
+    text-align: left;
+  }
+  .host-name {
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .host-meta {
+    font-size: 0.66rem;
+    color: var(--fg-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .host-delete {
+    flex-shrink: 0;
+    padding: 0 0.5rem;
+    color: var(--fg-tertiary);
+    opacity: 0;
+    border-radius: var(--radius-sm);
+    line-height: 1;
+  }
+  .host-row:hover .host-delete {
+    opacity: 1;
+  }
+  .host-delete:hover {
+    color: var(--fg-primary);
+    background: var(--surface-4);
   }
   .rail-footer {
     padding: var(--space-3);
