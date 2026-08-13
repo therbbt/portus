@@ -6,6 +6,7 @@
   import EmptyMainArea from "./EmptyMainArea.svelte";
   import SshConnectDialog from "./SshConnectDialog.svelte";
   import type { Protocol, SessionState, SshConnectOptions } from "../bridge";
+  import { nextAvailableNumber } from "../tabNumbering";
 
   interface Tab {
     id: string; // local tab id, stable across the session's lifetime
@@ -14,21 +15,27 @@
     state: SessionState;
     sessionId: string | null;
     options?: SshConnectOptions;
+    /** Reserves a slot in the "Local Shell N" sequence; freed when the tab closes. */
+    shellNumber?: number;
+    /** Once the user renames a tab, session-driven title updates stop overwriting it. */
+    renamed?: boolean;
   }
 
   let tabs: Tab[] = [];
   let activeTabId: string | null = null;
-  let nextTabNum = 1;
   let showSshDialog = false;
 
   function newShellTab() {
     const id = crypto.randomUUID();
+    const usedNumbers = tabs.map((t) => t.shellNumber).filter((n): n is number => n !== undefined);
+    const shellNumber = nextAvailableNumber(usedNumbers);
     const tab: Tab = {
       id,
       protocol: "shell",
-      title: `Local Shell ${nextTabNum++}`,
+      title: `Local Shell ${shellNumber}`,
       state: "connecting",
       sessionId: null,
+      shellNumber,
     };
     tabs = [...tabs, tab];
     activeTabId = id;
@@ -71,7 +78,14 @@
   }
 
   function onTitle(id: string, title: string) {
-    tabs = tabs.map((t) => (t.id === id ? { ...t, title } : t));
+    // A manual rename wins permanently over whatever the session reports.
+    tabs = tabs.map((t) => (t.id === id && !t.renamed ? { ...t, title } : t));
+  }
+
+  function onRename(id: string, title: string) {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    tabs = tabs.map((t) => (t.id === id ? { ...t, title: trimmed, renamed: true } : t));
   }
 
   function onClosed(id: string) {
@@ -89,6 +103,7 @@
         activeId={activeTabId}
         on:select={(e) => selectTab(e.detail.id)}
         on:close={(e) => closeTab(e.detail.id)}
+        on:rename={(e) => onRename(e.detail.id, e.detail.title)}
         on:new={newShellTab}
       />
       <div class="session-area">
