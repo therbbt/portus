@@ -72,7 +72,7 @@
     color: var(--fg-primary);
   }
   .win-btn.close:hover {
-    background: #e5484d;
+    background: #ef4444;
     color: #fff;
   }
 </style>
