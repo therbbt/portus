@@ -1,10 +1,14 @@
 //! SSH `Session` implementation (russh). Primary use case per the
 //! architecture doc — a new byte source behind the same `Session` trait and
 //! the same xterm.js frontend the local shell already uses.
+//!
+//! [`connect`] is also the entry point `portus-sftp` uses to get an
+//! authenticated connection to run the SFTP subsystem over, so host-key
+//! verification and auth only live in one place.
 
 mod known_hosts;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -37,6 +41,33 @@ fn default_port() -> u16 {
     22
 }
 
+/// Connects and authenticates, verifying the host key via the TOFU
+/// known-hosts store along the way. `events`, if given, gets a colored
+/// inline notice for a first-seen host key — pass `None` when there's no
+/// terminal to write into (e.g. an SFTP-only connection).
+pub async fn connect(
+    options: &SshConnectOptions,
+    events: Option<mpsc::UnboundedSender<SessionEvent>>,
+) -> Result<Handle<HostKeyVerifier>, SessionError> {
+    let host_id = format!("{}:{}", options.host, options.port);
+    let rejection_reason = Arc::new(Mutex::new(None));
+    let handler = HostKeyVerifier { host_id, events, rejection_reason: rejection_reason.clone() };
+
+    let config = Arc::new(client::Config::default());
+    let mut handle = client::connect(config, (options.host.as_str(), options.port), handler)
+        .await
+        .map_err(|e| {
+            // A rejected host key surfaces from russh as a generic
+            // "unknown key" error — prefer the detailed MITM-warning
+            // message the handler stashed, when there is one.
+            let reason = rejection_reason.lock().expect("poisoned").take();
+            SessionError::Protocol(reason.unwrap_or_else(|| format!("connect failed: {e}")))
+        })?;
+
+    authenticate(&mut handle, options).await?;
+    Ok(handle)
+}
+
 enum SshCommand {
     Write(Bytes),
     Resize(u16, u16),
@@ -60,16 +91,7 @@ impl Session for SshSession {
         let _ = events.send(SessionEvent::StateChanged { state: SessionState::Connecting });
 
         let opts = self.options.clone();
-        let host_id = format!("{}:{}", opts.host, opts.port);
-
-        let config = Arc::new(client::Config::default());
-        let handler = HostKeyVerifier { events: events.clone(), host_id: host_id.clone() };
-
-        let mut handle = client::connect(config, (opts.host.as_str(), opts.port), handler)
-            .await
-            .map_err(|e| SessionError::Protocol(format!("connect failed: {e}")))?;
-
-        authenticate(&mut handle, &opts).await?;
+        let handle = connect(&opts, Some(events.clone())).await?;
 
         let channel = handle
             .channel_open_session()
@@ -188,9 +210,10 @@ async fn run_channel(
     let _ = events.send(SessionEvent::Closed { reason: None });
 }
 
-struct HostKeyVerifier {
-    events: mpsc::UnboundedSender<SessionEvent>,
+pub struct HostKeyVerifier {
     host_id: String,
+    events: Option<mpsc::UnboundedSender<SessionEvent>>,
+    rejection_reason: Arc<Mutex<Option<String>>>,
 }
 
 #[async_trait]
@@ -203,21 +226,29 @@ impl client::Handler for HostKeyVerifier {
             known_hosts::Verdict::Known => Ok(true),
             known_hosts::Verdict::TrustedOnFirstUse => {
                 let msg = format!(
-                    "\r\n\x1b[33m[portus] trusting new SSH host key for {} (fingerprint SHA256:{})\x1b[0m\r\n",
+                    "trusting new SSH host key for {} (fingerprint SHA256:{})",
                     self.host_id,
                     server_public_key.fingerprint()
                 );
-                let _ = self.events.send(SessionEvent::Data { data: Bytes::from(msg) });
+                tracing::info!("{msg}");
+                if let Some(events) = &self.events {
+                    let _ = events.send(SessionEvent::Data {
+                        data: Bytes::from(format!("\r\n\x1b[33m[portus] {msg}\x1b[0m\r\n")),
+                    });
+                }
                 Ok(true)
             }
             known_hosts::Verdict::Mismatch => {
-                let _ = self.events.send(SessionEvent::Error {
-                    message: format!(
-                        "SSH host key for {} has changed (fingerprint now SHA256:{}) — refusing to connect, possible MITM",
-                        self.host_id,
-                        server_public_key.fingerprint()
-                    ),
-                });
+                let msg = format!(
+                    "SSH host key for {} has changed (fingerprint now SHA256:{}) — refusing to connect, possible MITM",
+                    self.host_id,
+                    server_public_key.fingerprint()
+                );
+                tracing::warn!("{msg}");
+                *self.rejection_reason.lock().expect("poisoned") = Some(msg.clone());
+                if let Some(events) = &self.events {
+                    let _ = events.send(SessionEvent::Error { message: msg });
+                }
                 Ok(false)
             }
         }
