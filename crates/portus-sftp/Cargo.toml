@@ -6,9 +6,15 @@ license.workspace = true
 
 [dependencies]
 portus-core = { workspace = true }
+portus-ssh = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true }
+russh = "0.45"
 russh-sftp = "2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

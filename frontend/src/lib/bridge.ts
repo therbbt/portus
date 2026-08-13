@@ -137,6 +137,50 @@ export async function closeSession(sessionId: string): Promise<void> {
   await invoke("session_close", { sessionId });
 }
 
+// --- SFTP --------------------------------------------------------------
+// A file panel, not a terminal session — plain request/response calls
+// rather than the session bridge's event stream. Runs over its own SSH
+// connection (see portus-sftp), so it takes the same SshConnectOptions.
+
+export interface SftpDirEntry {
+  name: string;
+  isDir: boolean;
+  size: number;
+}
+
+export async function sftpConnect(options: SshConnectOptions): Promise<string> {
+  return invoke<string>("sftp_connect", { options });
+}
+
+export async function sftpList(id: string, path: string): Promise<SftpDirEntry[]> {
+  return invoke<SftpDirEntry[]>("sftp_list", { id, path });
+}
+
+export async function sftpReadFile(id: string, path: string): Promise<Uint8Array> {
+  const bytes = await invoke<number[]>("sftp_read_file", { id, path });
+  return new Uint8Array(bytes);
+}
+
+export async function sftpWriteFile(id: string, path: string, data: Uint8Array): Promise<void> {
+  await invoke("sftp_write_file", { id, path, data: Array.from(data) });
+}
+
+export async function sftpRemoveFile(id: string, path: string): Promise<void> {
+  await invoke("sftp_remove_file", { id, path });
+}
+
+export async function sftpCreateDir(id: string, path: string): Promise<void> {
+  await invoke("sftp_create_dir", { id, path });
+}
+
+export async function sftpRemoveDir(id: string, path: string): Promise<void> {
+  await invoke("sftp_remove_dir", { id, path });
+}
+
+export async function sftpDisconnect(id: string): Promise<void> {
+  await invoke("sftp_disconnect", { id });
+}
+
 export interface SessionSubscription {
   unlisten(): Promise<void>;
 }
