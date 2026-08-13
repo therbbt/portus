@@ -4,6 +4,7 @@
   import type { Host } from "../bridge";
 
   export let hosts: Host[] = [];
+  export let width = 260;
 
   const dispatch = createEventDispatcher<{
     newShell: void;
@@ -26,7 +27,7 @@
   };
 </script>
 
-<aside class="rail">
+<aside class="rail" style="width: {width}px; min-width: {width}px">
   <div class="rail-header">
     <span class="rail-title">Hosts</span>
   </div>
@@ -78,8 +79,7 @@
 
 <style>
   .rail {
-    width: var(--rail-width);
-    min-width: var(--rail-width);
+    flex-shrink: 0;
     background: var(--surface-1);
     display: flex;
     flex-direction: column;
