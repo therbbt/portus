@@ -33,6 +33,14 @@ export interface SerialConnectOptions {
   baudRate?: number;
 }
 
+export interface RdpConnectOptions {
+  host: string;
+  port?: number;
+  username: string;
+  password: string;
+  domain?: string | null;
+}
+
 /** Emitted alongside a connect dialog's `connect` event when the user
  * checked "save this connection" — just the display name, since everything
  * else needed to build the saved `Host` is already in the connect options. */
@@ -40,7 +48,7 @@ export interface SaveRequest {
   name: string;
 }
 
-export type SessionOptions = SshConnectOptions | SerialConnectOptions | undefined;
+export type SessionOptions = SshConnectOptions | SerialConnectOptions | RdpConnectOptions | undefined;
 
 export async function openSession(protocol: Protocol, options?: SessionOptions): Promise<string> {
   return invoke<string>("session_open", { protocol, options: options ?? null });
@@ -181,8 +189,49 @@ export async function sftpDisconnect(id: string): Promise<void> {
   await invoke("sftp_disconnect", { id });
 }
 
+// --- RDP -----------------------------------------------------------------
+// View-only for now: no write/resize commands, just connect/disconnect and
+// a stream of decoded framebuffer updates. Deliberately not a SessionEvent
+// — RDP is a framebuffer, not a byte stream, so it gets its own event shape
+// and its own <canvas>-based view instead of xterm.js.
+
+export interface RdpFrameUpdate {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pngBase64: string;
+}
+
+export type RdpEvent =
+  | { type: "connected"; width: number; height: number }
+  | ({ type: "frame" } & RdpFrameUpdate)
+  | { type: "disconnected"; reason: string | null }
+  | { type: "error"; message: string };
+
+export async function rdpConnect(options: RdpConnectOptions): Promise<string> {
+  return invoke<string>("rdp_connect", { options });
+}
+
+export async function rdpDisconnect(id: string): Promise<void> {
+  await invoke("rdp_disconnect", { id });
+}
+
 export interface SessionSubscription {
   unlisten(): Promise<void>;
+}
+
+/** Subscribes to every `rdp:<id>:*` channel and dispatches to `onEvent`. */
+export async function subscribeRdp(id: string, onEvent: (event: RdpEvent) => void): Promise<SessionSubscription> {
+  const kinds = ["connected", "frame", "disconnected", "error"];
+  const unlistens: UnlistenFn[] = await Promise.all(
+    kinds.map((kind) => listen(`rdp:${id}:${kind}`, (e) => onEvent(e.payload as RdpEvent))),
+  );
+  return {
+    async unlisten() {
+      for (const fn of unlistens) fn();
+    },
+  };
 }
 
 /** Subscribes to every `session:<id>:*` channel and dispatches to `onEvent`. */

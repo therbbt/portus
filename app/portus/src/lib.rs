@@ -1,8 +1,10 @@
 mod adapter;
 pub mod commands;
+mod rdp_state;
 mod sftp_state;
 
 use adapter::AppState;
+use rdp_state::RdpState;
 use sftp_state::SftpState;
 
 pub fn run() {
@@ -11,6 +13,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .manage(SftpState::default())
+        .manage(RdpState::default())
         .invoke_handler(tauri::generate_handler![
             commands::session_open,
             commands::session_write,
@@ -30,6 +33,8 @@ pub fn run() {
             commands::sftp_create_dir,
             commands::sftp_remove_dir,
             commands::sftp_disconnect,
+            commands::rdp_connect,
+            commands::rdp_disconnect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running portus");

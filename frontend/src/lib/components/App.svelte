@@ -7,6 +7,8 @@
   import EmptyMainArea from "./EmptyMainArea.svelte";
   import SshConnectDialog from "./SshConnectDialog.svelte";
   import SerialConnectDialog from "./SerialConnectDialog.svelte";
+  import RdpConnectDialog from "./RdpConnectDialog.svelte";
+  import RdpView from "./RdpView.svelte";
   import SftpPanel from "./SftpPanel.svelte";
   import type {
     Protocol,
@@ -14,6 +16,7 @@
     SessionOptions,
     SshConnectOptions,
     SerialConnectOptions,
+    RdpConnectOptions,
     SaveRequest,
     Host,
   } from "../bridge";
@@ -37,6 +40,7 @@
   let activeTabId: string | null = null;
   let showSshDialog = false;
   let showSerialDialog = false;
+  let showRdpDialog = false;
   let showSftpPanel = false;
   let hosts: Host[] = [];
 
@@ -121,6 +125,15 @@
     }
   }
 
+  function openRdpDialog() {
+    showRdpDialog = true;
+  }
+
+  function onRdpConnect(options: RdpConnectOptions) {
+    showRdpDialog = false;
+    openTab("rdp", `${options.username}@${options.host}`, options);
+  }
+
   async function connectToSavedHost(host: Host) {
     const secret = await resolveHostSecret(host.id).catch(() => null);
 
@@ -139,6 +152,16 @@
     } else if (host.protocol === "serial") {
       const options: SerialConnectOptions = { portName: host.address, baudRate: host.baudRate ?? undefined };
       openTab("serial", host.name, options);
+    } else if (host.protocol === "rdp") {
+      // No UI saves an RDP host yet (see RdpConnectDialog) — this only
+      // matters for a hand-edited config.json, which the format allows.
+      const options: RdpConnectOptions = {
+        host: host.address,
+        port: host.port ?? undefined,
+        username: host.username ?? "",
+        password: secret ?? "",
+      };
+      openTab("rdp", host.name, options);
     }
   }
 
@@ -192,6 +215,7 @@
       on:newShell={newShellTab}
       on:newSsh={openSshDialog}
       on:newSerial={openSerialDialog}
+      on:newRdp={openRdpDialog}
       on:connect={(e) => connectToSavedHost(e.detail)}
       on:deleteHost={(e) => onDeleteHost(e.detail)}
     />
@@ -211,17 +235,31 @@
       </div>
       <div class="session-area">
         {#each tabs as tab (tab.id)}
-          <Terminal
-            protocol={tab.protocol}
-            options={tab.options}
-            active={tab.id === activeTabId}
-            on:state={(e) => onState(tab.id, e.detail)}
-            on:title={(e) => onTitle(tab.id, e.detail.title)}
-            on:closed={() => onClosed(tab.id)}
-          />
+          {#if tab.protocol === "rdp"}
+            <RdpView
+              options={tab.options as RdpConnectOptions}
+              active={tab.id === activeTabId}
+              on:state={(e) => onState(tab.id, e.detail)}
+              on:closed={() => onClosed(tab.id)}
+            />
+          {:else}
+            <Terminal
+              protocol={tab.protocol}
+              options={tab.options}
+              active={tab.id === activeTabId}
+              on:state={(e) => onState(tab.id, e.detail)}
+              on:title={(e) => onTitle(tab.id, e.detail.title)}
+              on:closed={() => onClosed(tab.id)}
+            />
+          {/if}
         {/each}
         {#if tabs.length === 0}
-          <EmptyMainArea on:newShell={newShellTab} on:newSsh={openSshDialog} on:newSerial={openSerialDialog} />
+          <EmptyMainArea
+            on:newShell={newShellTab}
+            on:newSsh={openSshDialog}
+            on:newSerial={openSerialDialog}
+            on:newRdp={openRdpDialog}
+          />
         {/if}
       </div>
     </div>
@@ -232,6 +270,9 @@
   {/if}
   {#if showSerialDialog}
     <SerialConnectDialog on:connect={(e) => onSerialConnect(e.detail)} on:cancel={() => (showSerialDialog = false)} />
+  {/if}
+  {#if showRdpDialog}
+    <RdpConnectDialog on:connect={(e) => onRdpConnect(e.detail)} on:cancel={() => (showRdpDialog = false)} />
   {/if}
   {#if showSftpPanel && activeSshOptions && activeTab}
     <SftpPanel
@@ -296,7 +337,8 @@
     display: flex;
     min-height: 0;
   }
-  .session-area :global(.terminal-host) {
+  .session-area :global(.terminal-host),
+  .session-area :global(.rdp-view) {
     position: absolute;
     inset: 0;
   }
