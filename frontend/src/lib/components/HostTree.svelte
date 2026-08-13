@@ -51,6 +51,7 @@
             role="button"
             tabindex="0"
             aria-label={`Delete ${host.name}`}
+            title={`Delete ${host.name}`}
             on:click|stopPropagation={() => dispatch("deleteHost", host)}
             on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteHost", host)}
           >
