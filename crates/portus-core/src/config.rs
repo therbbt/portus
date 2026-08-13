@@ -10,9 +10,10 @@ use crate::session::Protocol;
 /// Bump this whenever the on-disk shape of [`Config`] changes, and add a
 /// migration arm in [`migrate`]. The file is hand-editable, so migrations
 /// must be forgiving of missing fields rather than rejecting the file.
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Config {
     pub schema_version: u32,
     #[serde(default)]
@@ -35,6 +36,7 @@ impl Default for Config {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Group {
     pub id: Uuid,
     pub name: String,
@@ -45,24 +47,65 @@ pub struct Group {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Host {
     pub id: Uuid,
     pub name: String,
     #[serde(default)]
     pub group_id: Option<Uuid>,
     pub protocol: Protocol,
+    /// Hostname/IP for network protocols, device path for serial.
     pub address: String,
     #[serde(default)]
     pub port: Option<u16>,
     #[serde(default)]
     pub username: Option<String>,
-    /// Handle into the OS keychain (see [`crate::keychain`]) — never a
-    /// literal secret. `None` means "no stored credential, prompt on connect".
     #[serde(default)]
-    pub credential_handle: Option<String>,
+    pub baud_rate: Option<u32>,
+    #[serde(default)]
+    pub auth: AuthMethod,
+}
+
+/// Never holds a literal secret — only handles into the OS keychain (see
+/// [`crate::keychain`]). What actually gets prompted for on connect (or
+/// resolved from the keychain) depends on which variant this is.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum AuthMethod {
+    /// No stored credential — prompt on every connect.
+    #[default]
+    None,
+    // `rename_all` on the enum only renames the variant tags above
+    // ("password", "privateKey") — it does NOT reach into a struct
+    // variant's own fields, so each multi-word field name here needs its
+    // own `rename` to end up camelCase on the wire like everything else
+    // this frontend touches.
+    Password {
+        #[serde(rename = "credentialHandle")]
+        credential_handle: String,
+    },
+    PrivateKey {
+        path: String,
+        #[serde(default, rename = "passphraseHandle")]
+        passphrase_handle: Option<String>,
+    },
+}
+
+impl AuthMethod {
+    /// The keychain handle this variant stores, if any — used to resolve
+    /// the actual secret on connect, and to clean up the keychain entry
+    /// when the host is deleted.
+    pub fn credential_handle(&self) -> Option<&str> {
+        match self {
+            AuthMethod::None => None,
+            AuthMethod::Password { credential_handle } => Some(credential_handle),
+            AuthMethod::PrivateKey { passphrase_handle, .. } => passphrase_handle.as_deref(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     #[serde(default = "default_font_family")]
     pub terminal_font_family: String,
@@ -140,8 +183,14 @@ fn migrate(mut value: serde_json::Value) -> Result<serde_json::Value, ConfigErro
         .and_then(|v| v.as_u64())
         .unwrap_or(1);
 
+    // v1 -> v2: `Host.credential_handle: Option<String>` became `Host.auth:
+    // AuthMethod`. No rewrite needed here — `#[serde(default)]` on `auth`
+    // means a v1 host missing that field just deserializes to
+    // `AuthMethod::None`, and the field being dropped, so any old
+    // `credential_handle` on the value is silently ignored by serde.
+
     // Future migrations go here, e.g.:
-    // if version < 2 { /* rewrite `value` in place */ }
+    // if version < 3 { /* rewrite `value` in place */ }
 
     if let Some(obj) = value.as_object_mut() {
         obj.insert(

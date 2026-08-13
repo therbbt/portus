@@ -1,10 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
-  import type { SerialConnectOptions } from "../bridge";
+  import type { SerialConnectOptions, SaveRequest } from "../bridge";
   import { listSerialPorts } from "../bridge";
 
   const dispatch = createEventDispatcher<{
-    connect: SerialConnectOptions;
+    connect: { options: SerialConnectOptions; save: SaveRequest | null };
     cancel: void;
   }>();
 
@@ -13,6 +13,8 @@
   let portName = "";
   let baudRate = 9600;
   let availablePorts: string[] = [];
+  let saveConnection = false;
+  let saveName = "";
   let panelEl: HTMLDivElement;
 
   onMount(async () => {
@@ -27,11 +29,12 @@
     }
   });
 
-  $: canSubmit = portName.trim().length > 0 && baudRate > 0;
+  $: canSubmit = portName.trim().length > 0 && baudRate > 0 && (!saveConnection || saveName.trim().length > 0);
 
   function submit() {
     if (!canSubmit) return;
-    dispatch("connect", { portName: portName.trim(), baudRate });
+    const options: SerialConnectOptions = { portName: portName.trim(), baudRate };
+    dispatch("connect", { options, save: saveConnection ? { name: saveName.trim() } : null });
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -89,6 +92,17 @@
       </datalist>
     </label>
 
+    <label class="checkbox-field">
+      <input type="checkbox" bind:checked={saveConnection} />
+      <span>Save this connection</span>
+    </label>
+    {#if saveConnection}
+      <label class="field">
+        <span>Name</span>
+        <input type="text" bind:value={saveName} placeholder={portName || "My device"} />
+      </label>
+    {/if}
+
     <div class="actions">
       <button class="btn" on:click={() => dispatch("cancel")}>Cancel</button>
       <button class="btn primary" disabled={!canSubmit} on:click={submit}>Connect</button>
@@ -143,6 +157,19 @@
   }
   input:focus-visible {
     box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--fg-secondary);
+    cursor: pointer;
+  }
+  .checkbox-field input {
+    padding: 0;
+    accent-color: var(--accent);
   }
 
   .hint {
