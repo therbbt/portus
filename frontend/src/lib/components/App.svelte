@@ -5,7 +5,8 @@
   import Terminal from "./Terminal.svelte";
   import EmptyMainArea from "./EmptyMainArea.svelte";
   import SshConnectDialog from "./SshConnectDialog.svelte";
-  import type { Protocol, SessionState, SshConnectOptions } from "../bridge";
+  import SerialConnectDialog from "./SerialConnectDialog.svelte";
+  import type { Protocol, SessionState, SessionOptions, SshConnectOptions, SerialConnectOptions } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
 
   interface Tab {
@@ -14,7 +15,7 @@
     title: string;
     state: SessionState;
     sessionId: string | null;
-    options?: SshConnectOptions;
+    options?: SessionOptions;
     /** Reserves a slot in the "Local Shell N" sequence; freed when the tab closes. */
     shellNumber?: number;
     /** Once the user renames a tab, session-driven title updates stop overwriting it. */
@@ -24,6 +25,7 @@
   let tabs: Tab[] = [];
   let activeTabId: string | null = null;
   let showSshDialog = false;
+  let showSerialDialog = false;
 
   function newShellTab() {
     const id = crypto.randomUUID();
@@ -52,6 +54,25 @@
       id,
       protocol: "ssh",
       title: `${options.username}@${options.host}`,
+      state: "connecting",
+      sessionId: null,
+      options,
+    };
+    tabs = [...tabs, tab];
+    activeTabId = id;
+  }
+
+  function openSerialDialog() {
+    showSerialDialog = true;
+  }
+
+  function onSerialConnect(options: SerialConnectOptions) {
+    showSerialDialog = false;
+    const id = crypto.randomUUID();
+    const tab: Tab = {
+      id,
+      protocol: "serial",
+      title: options.portName,
       state: "connecting",
       sessionId: null,
       options,
@@ -96,7 +117,7 @@
 <div class="app-shell">
   <TitleBar />
   <div class="body">
-    <HostTree on:newShell={newShellTab} on:newSsh={openSshDialog} />
+    <HostTree on:newShell={newShellTab} on:newSsh={openSshDialog} on:newSerial={openSerialDialog} />
     <div class="main">
       <TabStrip
         tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
@@ -118,7 +139,7 @@
           />
         {/each}
         {#if tabs.length === 0}
-          <EmptyMainArea on:newShell={newShellTab} on:newSsh={openSshDialog} />
+          <EmptyMainArea on:newShell={newShellTab} on:newSsh={openSshDialog} on:newSerial={openSerialDialog} />
         {/if}
       </div>
     </div>
@@ -126,6 +147,9 @@
 
   {#if showSshDialog}
     <SshConnectDialog on:connect={(e) => onSshConnect(e.detail)} on:cancel={() => (showSshDialog = false)} />
+  {/if}
+  {#if showSerialDialog}
+    <SerialConnectDialog on:connect={(e) => onSerialConnect(e.detail)} on:cancel={() => (showSerialDialog = false)} />
   {/if}
 </div>
 

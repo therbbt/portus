@@ -3113,6 +3113,8 @@ dependencies = [
  "async-trait",
  "bytes",
  "portus-core",
+ "serde",
+ "serde_json",
  "serialport",
  "tokio",
  "tracing",
