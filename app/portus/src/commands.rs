@@ -6,8 +6,13 @@ use portus_core::config::Config;
 use crate::adapter::{AppState, SessionCommand};
 
 #[tauri::command]
-pub fn session_open(protocol: String, app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
-    state.open(&protocol, app)
+pub fn session_open(
+    protocol: String,
+    options: Option<serde_json::Value>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    state.open(&protocol, options.unwrap_or(serde_json::Value::Null), app)
 }
 
 #[tauri::command]

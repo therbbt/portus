@@ -4,7 +4,7 @@
 
   export let hosts: Array<{ id: string; name: string }> = [];
 
-  const dispatch = createEventDispatcher<{ newShell: void }>();
+  const dispatch = createEventDispatcher<{ newShell: void; newSsh: void }>();
 </script>
 
 <aside class="rail">
@@ -27,6 +27,9 @@
   {/if}
 
   <div class="rail-footer">
+    <button class="new-shell-btn" on:click={() => dispatch("newSsh")}>
+      + SSH connection
+    </button>
     <button class="new-shell-btn" on:click={() => dispatch("newShell")}>
       + Local shell
     </button>
@@ -93,6 +96,9 @@
   }
   .rail-footer {
     padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
   }
   .new-shell-btn {
     width: 100%;
