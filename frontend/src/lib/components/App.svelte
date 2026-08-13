@@ -57,6 +57,10 @@
     } catch {
       // No persisted config yet (first launch) — the rail just stays empty.
     }
+
+    // Terminal-first: land on a working shell rather than the empty state,
+    // same as opening a real terminal app.
+    newShellTab();
   });
 
   function newShellTab() {
