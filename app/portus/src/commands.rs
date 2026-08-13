@@ -1,14 +1,16 @@
 use bytes::Bytes;
 use serde::Deserialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use portus_core::config::{AuthMethod, Config, Host};
 use portus_core::session::Protocol;
+use portus_rdp::{RdpConnectOptions, RdpEvent};
 use portus_sftp::DirEntry;
 use portus_ssh::SshConnectOptions;
 
 use crate::adapter::{AppState, SessionCommand};
+use crate::rdp_state::RdpState;
 use crate::sftp_state::SftpState;
 
 #[tauri::command]
@@ -208,4 +210,43 @@ pub async fn sftp_remove_dir(id: String, path: String, state: State<'_, SftpStat
 pub fn sftp_disconnect(id: String, state: State<'_, SftpState>) -> Result<(), String> {
     state.remove(&id);
     Ok(())
+}
+
+// --- RDP -----------------------------------------------------------------
+// View-only for now: connect, stream decoded framebuffer updates, and
+// disconnect. No input forwarding yet, so no rdp_write/rdp_resize commands.
+
+#[tauri::command]
+pub async fn rdp_connect(options: RdpConnectOptions, app: AppHandle, state: State<'_, RdpState>) -> Result<String, String> {
+    let id = state.reserve_id();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<RdpEvent>();
+
+    let forward_app = app.clone();
+    let forward_id = id.clone();
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            emit_rdp_event(&forward_app, &forward_id, &event);
+        }
+    });
+
+    let mut client = portus_rdp::RdpClient::default();
+    client.connect(options, tx).await.map_err(|e| e.to_string())?;
+    state.insert(id.clone(), client);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn rdp_disconnect(id: String, state: State<'_, RdpState>) -> Result<(), String> {
+    state.remove(&id);
+    Ok(())
+}
+
+fn emit_rdp_event(app: &AppHandle, id: &str, event: &RdpEvent) {
+    let kind = match event {
+        RdpEvent::Connected { .. } => "connected",
+        RdpEvent::Frame(_) => "frame",
+        RdpEvent::Disconnected { .. } => "disconnected",
+        RdpEvent::Error { .. } => "error",
+    };
+    let _ = app.emit(&format!("rdp:{id}:{kind}"), event);
 }

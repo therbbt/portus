@@ -2,7 +2,7 @@
   import { createEventDispatcher } from "svelte";
   import RingMark from "./RingMark.svelte";
 
-  const dispatch = createEventDispatcher<{ newShell: void; newSsh: void; newSerial: void }>();
+  const dispatch = createEventDispatcher<{ newShell: void; newSsh: void; newSerial: void; newRdp: void }>();
 </script>
 
 <div class="empty-main">
@@ -10,6 +10,7 @@
   <p class="title">No sessions open</p>
   <div class="actions">
     <button class="cta" on:click={() => dispatch("newSsh")}>Connect over SSH</button>
+    <button class="cta secondary" on:click={() => dispatch("newRdp")}>Connect over RDP</button>
     <button class="cta secondary" on:click={() => dispatch("newSerial")}>Connect over serial</button>
     <button class="cta secondary" on:click={() => dispatch("newShell")}>Open a local shell</button>
   </div>
