@@ -7,9 +7,16 @@ license.workspace = true
 [dependencies]
 portus-core = { workspace = true }
 tokio = { workspace = true }
-async-trait = { workspace = true }
-bytes = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
-# ironrdp integration lands in Milestone 6. Left out of the dependency graph
-# until then so the skeleton/shell/ssh milestones stay fast to build; the
-# crate boundary and Session stub below are what matter right now.
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
+ironrdp = { version = "0.17", features = ["session", "connector", "graphics", "pdu"] }
+ironrdp-blocking = "0.10"
+tokio-rustls = "0.26"
+sspi = { version = "0.21", features = ["network_client"] }
+x509-cert = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

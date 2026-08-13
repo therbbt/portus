@@ -9,6 +9,7 @@
     newShell: void;
     newSsh: void;
     newSerial: void;
+    newRdp: void;
     connect: Host;
     deleteHost: Host;
   }>();
@@ -62,6 +63,9 @@
   <div class="rail-footer">
     <button class="new-shell-btn" on:click={() => dispatch("newSsh")}>
       + SSH connection
+    </button>
+    <button class="new-shell-btn" on:click={() => dispatch("newRdp")}>
+      + RDP connection
     </button>
     <button class="new-shell-btn" on:click={() => dispatch("newSerial")}>
       + Serial connection
