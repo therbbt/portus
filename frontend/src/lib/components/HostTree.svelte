@@ -4,7 +4,7 @@
 
   export let hosts: Array<{ id: string; name: string }> = [];
 
-  const dispatch = createEventDispatcher<{ newShell: void; newSsh: void }>();
+  const dispatch = createEventDispatcher<{ newShell: void; newSsh: void; newSerial: void }>();
 </script>
 
 <aside class="rail">
@@ -29,6 +29,9 @@
   <div class="rail-footer">
     <button class="new-shell-btn" on:click={() => dispatch("newSsh")}>
       + SSH connection
+    </button>
+    <button class="new-shell-btn" on:click={() => dispatch("newSerial")}>
+      + Serial connection
     </button>
     <button class="new-shell-btn" on:click={() => dispatch("newShell")}>
       + Local shell

@@ -39,3 +39,8 @@ pub fn get_config() -> Result<Config, String> {
 pub fn save_config(config: Config) -> Result<(), String> {
     portus_core::config::save(&config).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn list_serial_ports() -> Vec<String> {
+    portus_serial::list_ports()
+}
