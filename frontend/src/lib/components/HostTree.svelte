@@ -174,20 +174,24 @@
     background: var(--surface-4);
   }
   .rail-footer {
-    padding: var(--space-3);
+    /* Matches FlashPad's sidebar Footer padding exactly (0.5rem 0.9rem) —
+       this is Portus's structural equivalent (bottom-of-sidebar bar), just
+       stacked instead of a single row since it holds four action buttons
+       instead of a search box. */
+    padding: 0.5rem 0.9rem;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: 0.4rem;
   }
   .new-shell-btn {
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    padding: 0.35rem 0.6rem;
     background: var(--surface-2);
     color: var(--fg-primary);
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    font-size: 13px;
+    font-size: 0.75rem;
     text-align: left;
   }
   .new-shell-btn:hover {
