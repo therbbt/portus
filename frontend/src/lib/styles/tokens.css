@@ -1,11 +1,16 @@
 /*
  * FlashPad-family design tokens.
  *
- * Surfaces, foreground, and accent below are the actual "FlashPad Dark"
- * palette (see FlashPad's src/lib/theme/palettes.ts), carried over so Portus
- * reads as a sibling app rather than a different studio's work. Everything
- * in the app themes off these variables, so a future palette swap — or
- * picking up FlashPad's other five palettes — is a one-file change.
+ * Surfaces and foreground below are the actual "FlashPad Dark" palette (see
+ * FlashPad's src/lib/theme/palettes.ts), carried over so Portus reads as a
+ * sibling app rather than a different studio's work. The accent is
+ * deliberately NOT FlashPad's primary --accent (a blue, used for its own
+ * chrome) — it's the teal-green FlashPad itself reaches for on the "search
+ * all databases" toggle (Footer.svelte's `.search-scope-btn.active`,
+ * `#4dd0c8` / `rgba(77, 208, 200, 0.16)`), which reads as more at home next
+ * to a terminal's status/connection language than another blue would.
+ * Everything in the app themes off these variables, so a future palette
+ * swap is a one-file change.
  */
 :root {
   /* Surfaces — tonal steps, no borders/shadows to separate panels */
@@ -25,12 +30,12 @@
      separated primarily by tone and spacing, not borders. */
   --hairline: rgba(255, 255, 255, 0.08);
 
-  /* The one accent (FlashPad --accent). Used for: active tab indicator,
-     focus rings, the connection-status dot, and primary buttons. Nothing
-     else — reach for a second accent color and stop. */
-  --accent: #5b9bd5;
-  --accent-fg: #0b1720; /* text/icon color on top of a solid accent fill */
-  --accent-dim: rgba(91, 155, 213, 0.16); /* accent wash, e.g. focus ring halo */
+  /* The one accent. Used for: active tab indicator, focus rings, the
+     connection-status dot, and primary buttons. Nothing else — reach for a
+     second accent color and stop. */
+  --accent: #4dd0c8;
+  --accent-fg: #0a1f1c; /* text/icon color on top of a solid accent fill */
+  --accent-dim: rgba(77, 208, 200, 0.16); /* accent wash, e.g. focus ring halo */
 
   /* Status dot colors — accent doubles as "connected" */
   --status-connecting: #d7c37a;
@@ -58,7 +63,14 @@
   /* Chrome */
   --titlebar-height: 28px;
   --tabstrip-height: 36px;
-  --rail-width: 260px;
+
+  /* The Tauri window is fully transparent (see tauri.conf.json) and 1px
+     larger on every side than the visible app-shell, so the shell's own
+     box-shadow renders into that margin against the desktop instead of a
+     hard rectangle — same trick FlashPad uses for its floating, rounded-
+     corner window. Every full-bleed overlay/backdrop must inset by this
+     too, or it paints over the margin and the shadow disappears. */
+  --window-shadow-margin: 1px;
 
   --focus-ring: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--accent);
 }
@@ -72,7 +84,9 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--surface-0);
+  /* Transparent so the window-shadow-margin above shows the desktop
+     through it — the actual app background lives on .app-shell. */
+  background: transparent;
   color: var(--fg-primary);
   font-family: var(--font-ui);
   font-size: var(--font-size-ui);
@@ -82,6 +96,11 @@ body {
 
 #app {
   height: 100%;
+}
+
+body.resizing-sidebar {
+  cursor: col-resize;
+  user-select: none;
 }
 
 ::selection {

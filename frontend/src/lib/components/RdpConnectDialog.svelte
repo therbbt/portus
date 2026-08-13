@@ -91,7 +91,7 @@
 <style>
   .overlay {
     position: fixed;
-    inset: 0;
+    inset: var(--window-shadow-margin);
     background: rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: center;

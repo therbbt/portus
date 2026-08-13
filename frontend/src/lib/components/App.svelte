@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import TitleBar from "./TitleBar.svelte";
   import HostTree from "./HostTree.svelte";
+  import SidebarResizer from "./SidebarResizer.svelte";
   import TabStrip from "./TabStrip.svelte";
   import Terminal from "./Terminal.svelte";
   import EmptyMainArea from "./EmptyMainArea.svelte";
@@ -43,6 +44,7 @@
   let showRdpDialog = false;
   let showSftpPanel = false;
   let hosts: Host[] = [];
+  let sidebarWidth = 260;
 
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   $: activeSshOptions = activeTab?.protocol === "ssh" ? (activeTab.options as SshConnectOptions) : null;
@@ -212,6 +214,7 @@
   <div class="body">
     <HostTree
       {hosts}
+      width={sidebarWidth}
       on:newShell={newShellTab}
       on:newSsh={openSshDialog}
       on:newSerial={openSerialDialog}
@@ -219,6 +222,7 @@
       on:connect={(e) => connectToSavedHost(e.detail)}
       on:deleteHost={(e) => onDeleteHost(e.detail)}
     />
+    <SidebarResizer bind:width={sidebarWidth} />
     <div class="main">
       <div class="tabstrip-row">
         <TabStrip
@@ -285,10 +289,17 @@
 
 <style>
   .app-shell {
-    height: 100%;
+    /* The Tauri window is transparent and exactly window-shadow-margin
+       larger than this on every side, so the box-shadow below renders into
+       that sliver against the desktop instead of a hard rectangle. */
+    position: fixed;
+    inset: var(--window-shadow-margin);
     display: flex;
     flex-direction: column;
-    position: relative;
+    background: var(--surface-0);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   }
   .body {
     flex: 1;
