@@ -5,8 +5,11 @@ use uuid::Uuid;
 
 use portus_core::config::{AuthMethod, Config, Host};
 use portus_core::session::Protocol;
+use portus_sftp::DirEntry;
+use portus_ssh::SshConnectOptions;
 
 use crate::adapter::{AppState, SessionCommand};
+use crate::sftp_state::SftpState;
 
 #[tauri::command]
 pub fn session_open(
@@ -154,4 +157,55 @@ pub fn resolve_host_secret(host_id: Uuid) -> Result<Option<String>, String> {
         Some(handle) => portus_core::keychain::retrieve(handle).map(Some).map_err(|e| e.to_string()),
         None => Ok(None),
     }
+}
+
+// --- SFTP --------------------------------------------------------------
+// A file panel, not a terminal Session, so it gets plain async
+// request/response commands rather than the session bridge's event stream.
+
+#[tauri::command]
+pub async fn sftp_connect(options: SshConnectOptions, state: State<'_, SftpState>) -> Result<String, String> {
+    let client = portus_sftp::SftpClient::connect(&options).await.map_err(|e| e.to_string())?;
+    Ok(state.insert(client))
+}
+
+#[tauri::command]
+pub async fn sftp_list(id: String, path: String, state: State<'_, SftpState>) -> Result<Vec<DirEntry>, String> {
+    state.get(&id)?.list(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_read_file(id: String, path: String, state: State<'_, SftpState>) -> Result<Vec<u8>, String> {
+    state.get(&id)?.read_file(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_write_file(
+    id: String,
+    path: String,
+    data: Vec<u8>,
+    state: State<'_, SftpState>,
+) -> Result<(), String> {
+    state.get(&id)?.write_file(&path, &data).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_remove_file(id: String, path: String, state: State<'_, SftpState>) -> Result<(), String> {
+    state.get(&id)?.remove_file(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_create_dir(id: String, path: String, state: State<'_, SftpState>) -> Result<(), String> {
+    state.get(&id)?.create_dir(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_remove_dir(id: String, path: String, state: State<'_, SftpState>) -> Result<(), String> {
+    state.get(&id)?.remove_dir(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn sftp_disconnect(id: String, state: State<'_, SftpState>) -> Result<(), String> {
+    state.remove(&id);
+    Ok(())
 }

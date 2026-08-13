@@ -7,6 +7,7 @@
   import EmptyMainArea from "./EmptyMainArea.svelte";
   import SshConnectDialog from "./SshConnectDialog.svelte";
   import SerialConnectDialog from "./SerialConnectDialog.svelte";
+  import SftpPanel from "./SftpPanel.svelte";
   import type {
     Protocol,
     SessionState,
@@ -36,7 +37,11 @@
   let activeTabId: string | null = null;
   let showSshDialog = false;
   let showSerialDialog = false;
+  let showSftpPanel = false;
   let hosts: Host[] = [];
+
+  $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+  $: activeSshOptions = activeTab?.protocol === "ssh" ? (activeTab.options as SshConnectOptions) : null;
 
   onMount(async () => {
     try {
@@ -173,6 +178,10 @@
   function onClosed(id: string) {
     closeTab(id);
   }
+
+  function toggleSftpPanel() {
+    showSftpPanel = !showSftpPanel;
+  }
 </script>
 
 <div class="app-shell">
@@ -187,14 +196,19 @@
       on:deleteHost={(e) => onDeleteHost(e.detail)}
     />
     <div class="main">
-      <TabStrip
-        tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
-        activeId={activeTabId}
-        on:select={(e) => selectTab(e.detail.id)}
-        on:close={(e) => closeTab(e.detail.id)}
-        on:rename={(e) => onRename(e.detail.id, e.detail.title)}
-        on:new={newShellTab}
-      />
+      <div class="tabstrip-row">
+        <TabStrip
+          tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
+          activeId={activeTabId}
+          on:select={(e) => selectTab(e.detail.id)}
+          on:close={(e) => closeTab(e.detail.id)}
+          on:rename={(e) => onRename(e.detail.id, e.detail.title)}
+          on:new={newShellTab}
+        />
+        {#if activeTab?.protocol === "ssh"}
+          <button class="files-btn" class:active={showSftpPanel} on:click={toggleSftpPanel}>Files</button>
+        {/if}
+      </div>
       <div class="session-area">
         {#each tabs as tab (tab.id)}
           <Terminal
@@ -219,6 +233,13 @@
   {#if showSerialDialog}
     <SerialConnectDialog on:connect={(e) => onSerialConnect(e.detail)} on:cancel={() => (showSerialDialog = false)} />
   {/if}
+  {#if showSftpPanel && activeSshOptions && activeTab}
+    <SftpPanel
+      options={activeSshOptions}
+      title={activeTab.title}
+      on:close={() => (showSftpPanel = false)}
+    />
+  {/if}
 </div>
 
 <style>
@@ -238,6 +259,36 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+  }
+  .tabstrip-row {
+    display: flex;
+    align-items: stretch;
+    background: var(--surface-1);
+  }
+  .tabstrip-row :global(.tabstrip) {
+    flex: 1;
+    min-width: 0;
+  }
+  .files-btn {
+    flex-shrink: 0;
+    align-self: center;
+    margin-right: var(--space-2);
+    padding: 0.3rem 0.7rem;
+    background: var(--surface-2);
+    color: var(--fg-secondary);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+  .files-btn:hover {
+    background: var(--surface-3);
+    color: var(--fg-primary);
+  }
+  .files-btn.active {
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 600;
   }
   .session-area {
     flex: 1;
