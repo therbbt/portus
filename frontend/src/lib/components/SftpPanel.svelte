@@ -152,7 +152,7 @@
       <span class="panel-title">Files</span>
       <span class="panel-subtitle">{title}</span>
     </div>
-    <button class="icon-btn" aria-label="Close" on:click={() => dispatch("close")}>×</button>
+    <button class="icon-btn" aria-label="Close" title="Close" on:click={() => dispatch("close")}>×</button>
   </div>
 
   <div class="toolbar">
@@ -207,6 +207,7 @@
               role="button"
               tabindex="0"
               aria-label={`Download ${entry.name}`}
+              title={`Download ${entry.name}`}
               on:click|stopPropagation={() => downloadEntry(entry)}
               on:keydown|stopPropagation={(e) => e.key === "Enter" && downloadEntry(entry)}
             >
@@ -218,6 +219,7 @@
             role="button"
             tabindex="0"
             aria-label={`Delete ${entry.name}`}
+            title={`Delete ${entry.name}`}
             on:click|stopPropagation={() => deleteEntry(entry)}
             on:keydown|stopPropagation={(e) => e.key === "Enter" && deleteEntry(entry)}
           >
