@@ -33,11 +33,29 @@
   let sessionId: string | null = null;
   let sub: { unlisten(): Promise<void> } | null = null;
   let resizeObserver: ResizeObserver;
+  let resizeRaf: number | null = null;
 
+  // fit() forces a synchronous layout read, and xterm's own onResize
+  // handler (below) already tells the backend when cols/rows actually
+  // change — so this only measures and resizes the grid, it never talks to
+  // the backend itself. During a live window drag a ResizeObserver can fire
+  // far more often than the browser paints, and each fit() was previously
+  // paired with its own redundant resizeSession() call on top of the one
+  // onResize already makes; both together were enough IPC + layout thrash
+  // per tick to make content visibly stop updating mid-drag.
   function applyFit() {
     if (!term || !sessionId) return;
     fitAddon.fit();
-    resizeSession(sessionId, term.cols, term.rows);
+  }
+
+  // Coalesces bursts of ResizeObserver callbacks (common during a live
+  // native window resize) down to at most one fit() per animation frame.
+  function scheduleFit() {
+    if (resizeRaf !== null) return;
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = null;
+      applyFit();
+    });
   }
 
   function handleEvent(event: SessionEvent) {
@@ -97,13 +115,14 @@
       if (sessionId) void resizeSession(sessionId, cols, rows);
     });
 
-    resizeObserver = new ResizeObserver(() => applyFit());
+    resizeObserver = new ResizeObserver(() => scheduleFit());
     resizeObserver.observe(container);
 
     void resizeSession(sessionId, term.cols, term.rows);
   });
 
   onDestroy(() => {
+    if (resizeRaf !== null) cancelAnimationFrame(resizeRaf);
     resizeObserver?.disconnect();
     void sub?.unlisten();
     if (sessionId) void closeSession(sessionId);

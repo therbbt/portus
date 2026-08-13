@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import TitleBar from "./TitleBar.svelte";
+  import ResizeHandles from "./ResizeHandles.svelte";
   import HostTree from "./HostTree.svelte";
   import SidebarResizer from "./SidebarResizer.svelte";
   import TabStrip from "./TabStrip.svelte";
@@ -210,6 +211,7 @@
 </script>
 
 <div class="app-shell">
+  <ResizeHandles />
   <TitleBar />
   <div class="body">
     <HostTree
