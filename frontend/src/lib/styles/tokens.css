@@ -1,0 +1,114 @@
+/*
+ * FlashPad-family design tokens.
+ *
+ * Surfaces, foreground, and accent below are the actual "FlashPad Dark"
+ * palette (see FlashPad's src/lib/theme/palettes.ts), carried over so Portus
+ * reads as a sibling app rather than a different studio's work. Everything
+ * in the app themes off these variables, so a future palette swap — or
+ * picking up FlashPad's other five palettes — is a one-file change.
+ */
+:root {
+  /* Surfaces — tonal steps, no borders/shadows to separate panels */
+  --surface-0: #16161a; /* window background (FlashPad --bg) */
+  --surface-1: #1e1e22; /* rail / panel background (FlashPad --panel) */
+  --surface-2: #28282d; /* raised panel — tab strip, overlays (FlashPad --panel-2) */
+  --surface-3: #303036; /* hovered row */
+  --surface-4: #38383f; /* active tab, pressed state */
+
+  /* Foreground — monochrome */
+  --fg-primary: #ecebe7; /* FlashPad --text */
+  --fg-secondary: #97958d; /* FlashPad --muted */
+  --fg-tertiary: #726f66;
+  --fg-disabled: #4d4b45;
+
+  /* Hairline used sparingly (e.g. titlebar bottom edge) — panels are still
+     separated primarily by tone and spacing, not borders. */
+  --hairline: rgba(255, 255, 255, 0.08);
+
+  /* The one accent (FlashPad --accent). Used for: active tab indicator,
+     focus rings, the connection-status dot, and primary buttons. Nothing
+     else — reach for a second accent color and stop. */
+  --accent: #5b9bd5;
+  --accent-fg: #0b1720; /* text/icon color on top of a solid accent fill */
+  --accent-dim: rgba(91, 155, 213, 0.16); /* accent wash, e.g. focus ring halo */
+
+  /* Status dot colors — accent doubles as "connected" */
+  --status-connecting: #d7c37a;
+  --status-connected: var(--accent);
+  --status-disconnected: #726f66;
+  --status-error: #ef4444;
+
+  /* Typography — Inter isn't bundled, same as FlashPad; it's used when
+     present on the system and falls back to the platform sans otherwise. */
+  --font-ui: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", ui-monospace, Consolas, monospace;
+  --font-size-ui: 13px;
+  --font-size-terminal: 14px;
+
+  /* Radius / spacing scale (FlashPad uses a 0.3/0.4/0.6rem scale throughout) */
+  --radius-sm: 0.3rem;
+  --radius-md: 0.4rem;
+  --radius-lg: 0.6rem;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Chrome */
+  --titlebar-height: 28px;
+  --tabstrip-height: 36px;
+  --rail-width: 260px;
+
+  --focus-ring: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--accent);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--surface-0);
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+}
+
+::selection {
+  background: var(--accent-dim);
+}
+
+button {
+  font-family: inherit;
+}
+
+*:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-4);
+  border-radius: var(--radius-sm);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-tertiary);
+}

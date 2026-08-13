@@ -1,0 +1,15 @@
+[package]
+name = "portus-rdp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+portus-core = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+tracing = { workspace = true }
+# ironrdp integration lands in Milestone 6. Left out of the dependency graph
+# until then so the skeleton/shell/ssh milestones stay fast to build; the
+# crate boundary and Session stub below are what matter right now.

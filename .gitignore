@@ -1,0 +1,10 @@
+/target
+/app/portus/target
+/app/portus/gen
+
+node_modules
+frontend/dist
+frontend/.vite
+
+*.log
+.DS_Store

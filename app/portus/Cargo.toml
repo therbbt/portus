@@ -1,0 +1,30 @@
+[package]
+name = "portus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+portus-core = { workspace = true }
+portus-shell = { workspace = true }
+portus-ssh = { workspace = true }
+portus-telnet = { workspace = true }
+portus-serial = { workspace = true }
+portus-rdp = { workspace = true }
+
+tauri = { version = "2", features = [] }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = "0.3"
+
+[lib]
+name = "portus_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]

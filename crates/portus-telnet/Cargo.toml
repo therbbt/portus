@@ -1,0 +1,12 @@
+[package]
+name = "portus-telnet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+portus-core = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+tracing = { workspace = true }
