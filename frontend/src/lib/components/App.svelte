@@ -5,13 +5,12 @@
   import HostTree from "./HostTree.svelte";
   import SidebarResizer from "./SidebarResizer.svelte";
   import TabStrip from "./TabStrip.svelte";
-  import Terminal from "./Terminal.svelte";
+  import PaneGrid from "./PaneGrid.svelte";
   import EmptyMainArea from "./EmptyMainArea.svelte";
   import SshConnectDialog from "./SshConnectDialog.svelte";
   import SerialConnectDialog from "./SerialConnectDialog.svelte";
   import ShellConnectDialog from "./ShellConnectDialog.svelte";
   import RdpConnectDialog from "./RdpConnectDialog.svelte";
-  import RdpView from "./RdpView.svelte";
   import SftpPanel from "./SftpPanel.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import NewConnectionMenu from "./NewConnectionMenu.svelte";
@@ -40,24 +39,30 @@
     setGroupCollapsed,
   } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
+  import {
+    collectPaneIds,
+    insertSplit,
+    removePane,
+    updateSplitSizes,
+    usedShellNumbers,
+    type PaneLayout,
+    type PaneState,
+    type SplitDirection,
+  } from "../panes";
 
   interface Tab {
     id: string; // local tab id, stable across the session's lifetime
-    protocol: Protocol;
     title: string;
-    state: SessionState;
-    sessionId: string | null;
-    options?: SessionOptions;
-    /** Set only for a saved host's session — unlocks scrollback persistence
-     * for a saved shell preset (see Terminal.svelte's hostId prop). */
-    hostId?: string;
-    /** Reserves a slot in the "Terminal N" sequence; freed when the tab closes. */
-    shellNumber?: number;
     /** Once the user renames a tab, session-driven title updates stop overwriting it. */
     renamed?: boolean;
+    layout: PaneLayout;
+    /** Which pane in this tab is the split target / shows the accent focus
+     * outline — distinct from `active`-ness, which is about the owning tab. */
+    activePaneId: string;
   }
 
   let tabs: Tab[] = [];
+  let panes: Record<string, PaneState> = {};
   let activeTabId: string | null = null;
   let showSshDialog = false;
   let showSerialDialog = false;
@@ -75,7 +80,8 @@
   let config: PortusConfig | null = null;
 
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
-  $: activeSshOptions = activeTab?.protocol === "ssh" ? (activeTab.options as SshConnectOptions) : null;
+  $: activePane = activeTab ? (panes[activeTab.activePaneId] ?? null) : null;
+  $: activeSshOptions = activePane?.protocol === "ssh" ? (activePane.options as SshConnectOptions) : null;
 
   // CSS generic family keywords (monospace, ui-monospace, ...) must stay
   // unquoted — quoting one turns it into a request for an actual font
@@ -136,27 +142,89 @@
     applyTerminalFontVars(next.settings);
   }
 
-  function newShellTab() {
+  function createPane(protocol: Protocol, title: string, options: SessionOptions, hostId?: string, shellNumber?: number): string {
     const id = crypto.randomUUID();
-    const usedNumbers = tabs.map((t) => t.shellNumber).filter((n): n is number => n !== undefined);
-    const shellNumber = nextAvailableNumber(usedNumbers);
-    const tab: Tab = {
-      id,
-      protocol: "shell",
-      title: `Terminal ${shellNumber}`,
-      state: "connecting",
-      sessionId: null,
-      shellNumber,
-    };
-    tabs = [...tabs, tab];
-    activeTabId = id;
+    panes = { ...panes, [id]: { id, protocol, title, state: "connecting", options, hostId, shellNumber } };
+    return id;
+  }
+
+  function newShellTab() {
+    const shellNumber = nextAvailableNumber(usedShellNumbers(panes));
+    const title = `Terminal ${shellNumber}`;
+    const paneId = createPane("shell", title, undefined, undefined, shellNumber);
+    const tabId = crypto.randomUUID();
+    tabs = [...tabs, { id: tabId, title, layout: { type: "leaf", paneId }, activePaneId: paneId }];
+    activeTabId = tabId;
   }
 
   function openTab(protocol: Protocol, title: string, options: SessionOptions, hostId?: string) {
-    const id = crypto.randomUUID();
-    const tab: Tab = { id, protocol, title, state: "connecting", sessionId: null, options, hostId };
-    tabs = [...tabs, tab];
-    activeTabId = id;
+    const paneId = createPane(protocol, title, options, hostId);
+    const tabId = crypto.randomUUID();
+    tabs = [...tabs, { id: tabId, title, layout: { type: "leaf", paneId }, activePaneId: paneId }];
+    activeTabId = tabId;
+  }
+
+  /** Splits the active tab's active pane, opening a fresh local shell in
+   * the new half — matches hitting "+" for a new tab, just landing beside
+   * the current pane instead of in a new tab. */
+  function splitActivePane(direction: SplitDirection) {
+    if (!activeTab) return;
+    const shellNumber = nextAvailableNumber(usedShellNumbers(panes));
+    const title = `Terminal ${shellNumber}`;
+    const newPaneId = createPane("shell", title, undefined, undefined, shellNumber);
+    const newLayout = insertSplit(activeTab.layout, activeTab.activePaneId, direction, newPaneId, crypto.randomUUID());
+    const tabId = activeTab.id;
+    tabs = tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout, activePaneId: newPaneId } : t));
+  }
+
+  function focusPane(tabId: string, paneId: string) {
+    tabs = tabs.map((t) => (t.id === tabId ? { ...t, activePaneId: paneId } : t));
+  }
+
+  function resizeSplit(tabId: string, splitId: string, sizes: number[]) {
+    tabs = tabs.map((t) => (t.id === tabId ? { ...t, layout: updateSplitSizes(t.layout, splitId, sizes) } : t));
+  }
+
+  function findTabIdForPane(paneId: string): string | null {
+    return tabs.find((t) => collectPaneIds(t.layout).includes(paneId))?.id ?? null;
+  }
+
+  /** Closing a tab's last remaining pane closes the tab itself — same
+   * fallback-active-tab selection as the plain tab-strip close always had. */
+  function closeTab(id: string) {
+    const idx = tabs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+
+    const ids = collectPaneIds(tabs[idx].layout);
+    const restPanes = { ...panes };
+    for (const paneId of ids) delete restPanes[paneId];
+    panes = restPanes;
+
+    tabs = tabs.filter((t) => t.id !== id);
+    if (activeTabId === id) {
+      const fallback = tabs[idx] ?? tabs[idx - 1] ?? tabs[0];
+      activeTabId = fallback ? fallback.id : null;
+    }
+  }
+
+  function closePane(tabId: string, paneId: string) {
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+
+    const remainingIds = collectPaneIds(tab.layout).filter((id) => id !== paneId);
+    if (remainingIds.length === 0) {
+      closeTab(tabId);
+      return;
+    }
+
+    const newLayout = removePane(tab.layout, paneId);
+    if (!newLayout) return; // unreachable given the remainingIds check above
+    const newActivePaneId = tab.activePaneId === paneId ? remainingIds[remainingIds.length - 1] : tab.activePaneId;
+    tabs = tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout, activePaneId: newActivePaneId } : t));
+
+    const restPanes = { ...panes };
+    delete restPanes[paneId];
+    panes = restPanes;
   }
 
   function openSshDialog() {
@@ -308,22 +376,17 @@
     activeTabId = id;
   }
 
-  function closeTab(id: string) {
-    const idx = tabs.findIndex((t) => t.id === id);
-    tabs = tabs.filter((t) => t.id !== id);
-    if (activeTabId === id) {
-      const fallback = tabs[idx] ?? tabs[idx - 1] ?? tabs[0];
-      activeTabId = fallback ? fallback.id : null;
-    }
+  function onPaneState(paneId: string, state: SessionState) {
+    const pane = panes[paneId];
+    if (!pane) return;
+    panes = { ...panes, [paneId]: { ...pane, state } };
   }
 
-  function onState(id: string, state: SessionState) {
-    tabs = tabs.map((t) => (t.id === id ? { ...t, state } : t));
-  }
-
-  function onTitle(id: string, title: string) {
+  function onPaneTitle(paneId: string, title: string) {
     // A manual rename wins permanently over whatever the session reports.
-    tabs = tabs.map((t) => (t.id === id && !t.renamed ? { ...t, title } : t));
+    const pane = panes[paneId];
+    if (!pane || pane.renamed) return;
+    panes = { ...panes, [paneId]: { ...pane, title } };
   }
 
   function onRename(id: string, title: string) {
@@ -332,14 +395,33 @@
     tabs = tabs.map((t) => (t.id === id ? { ...t, title: trimmed, renamed: true } : t));
   }
 
-  function onClosed(id: string) {
-    closeTab(id);
+  function onPaneClosed(paneId: string) {
+    const tabId = findTabIdForPane(paneId);
+    if (tabId) closePane(tabId, paneId);
   }
 
   function toggleSftpPanel() {
     showSftpPanel = !showSftpPanel;
   }
+
+  // Ctrl+Shift+<key> rather than a plain Ctrl+<key> — xterm.js's default
+  // keymap doesn't turn Ctrl+Shift combos into shell control sequences, so
+  // this is safe to reserve at the app level even while a terminal pane has
+  // keyboard focus, the same convention Windows Terminal/GNOME Terminal use.
+  function handleKeydown(event: KeyboardEvent) {
+    if (!event.ctrlKey || !event.shiftKey) return;
+    const key = event.key.toLowerCase();
+    if (key === "d") {
+      event.preventDefault();
+      splitActivePane("row");
+    } else if (key === "e") {
+      event.preventDefault();
+      splitActivePane("column");
+    }
+  }
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 <div class="app-shell">
   <ResizeHandles />
@@ -356,16 +438,40 @@
     </div>
     <div class="action-bar-main">
       <TabStrip
-        tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
+        tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: panes[t.activePaneId]?.state ?? "disconnected" }))}
         activeId={activeTabId}
         on:select={(e) => selectTab(e.detail.id)}
         on:close={(e) => closeTab(e.detail.id)}
         on:rename={(e) => onRename(e.detail.id, e.detail.title)}
         on:new={newShellTab}
       />
-      {#if activeTab?.protocol === "ssh"}
+      {#if activePane?.protocol === "ssh"}
         <button class="files-btn" class:active={showSftpPanel} on:click={toggleSftpPanel}>Files</button>
       {/if}
+      <button
+        class="split-btn"
+        aria-label="Split right"
+        title="Split right (Ctrl+Shift+D)"
+        disabled={!activeTab}
+        on:click={() => splitActivePane("row")}
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+          <line x1="8" y1="2.5" x2="8" y2="13.5" />
+        </svg>
+      </button>
+      <button
+        class="split-btn"
+        aria-label="Split down"
+        title="Split down (Ctrl+Shift+E)"
+        disabled={!activeTab}
+        on:click={() => splitActivePane("column")}
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+          <line x1="1.5" y1="8" x2="14.5" y2="8" />
+        </svg>
+      </button>
       <button class="settings-btn" aria-label="Settings" title="Settings" on:click={openSettingsPanel}>
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="8" cy="8" r="2.2" />
@@ -392,24 +498,21 @@
     <div class="main">
       <div class="session-area">
         {#each tabs as tab (tab.id)}
-          {#if tab.protocol === "rdp"}
-            <RdpView
-              options={tab.options as RdpConnectOptions}
+          <div class="tab-panes" class:hidden={tab.id !== activeTabId}>
+            <PaneGrid
+              node={tab.layout}
+              {panes}
+              activePaneId={tab.activePaneId}
               active={tab.id === activeTabId}
-              on:state={(e) => onState(tab.id, e.detail)}
-              on:closed={() => onClosed(tab.id)}
+              showHeader={collectPaneIds(tab.layout).length > 1}
+              onFocusPane={(paneId) => focusPane(tab.id, paneId)}
+              onClosePane={(paneId) => closePane(tab.id, paneId)}
+              onResizeSplit={(splitId, sizes) => resizeSplit(tab.id, splitId, sizes)}
+              {onPaneState}
+              {onPaneTitle}
+              {onPaneClosed}
             />
-          {:else}
-            <Terminal
-              protocol={tab.protocol}
-              options={tab.options}
-              hostId={tab.hostId}
-              active={tab.id === activeTabId}
-              on:state={(e) => onState(tab.id, e.detail)}
-              on:title={(e) => onTitle(tab.id, e.detail.title)}
-              on:closed={() => onClosed(tab.id)}
-            />
-          {/if}
+          </div>
         {/each}
         {#if tabs.length === 0}
           <EmptyMainArea
@@ -462,10 +565,10 @@
   {#if showRdpDialog}
     <RdpConnectDialog on:connect={(e) => onRdpConnect(e.detail)} on:cancel={() => (showRdpDialog = false)} />
   {/if}
-  {#if showSftpPanel && activeSshOptions && activeTab}
+  {#if showSftpPanel && activeSshOptions && activePane}
     <SftpPanel
       options={activeSshOptions}
-      title={activeTab.title}
+      title={activePane.title}
       on:close={() => (showSftpPanel = false)}
     />
   {/if}
@@ -557,6 +660,7 @@
     color: var(--accent-fg);
     font-weight: 600;
   }
+  .split-btn,
   .settings-btn {
     flex-shrink: 0;
     align-self: center;
@@ -572,9 +676,14 @@
     border-radius: var(--radius-md);
     cursor: pointer;
   }
+  .split-btn:hover,
   .settings-btn:hover {
     background: var(--surface-3);
     color: var(--fg-primary);
+  }
+  .split-btn:disabled {
+    color: var(--fg-disabled);
+    cursor: not-allowed;
   }
   .session-area {
     flex: 1;
@@ -582,9 +691,12 @@
     display: flex;
     min-height: 0;
   }
-  .session-area :global(.terminal-host),
-  .session-area :global(.rdp-view) {
+  .tab-panes {
     position: absolute;
     inset: 0;
+    display: flex;
+  }
+  .tab-panes.hidden {
+    display: none;
   }
 </style>
