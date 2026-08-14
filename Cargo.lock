@@ -4367,6 +4367,7 @@ dependencies = [
  "bytes",
  "portable-pty",
  "portus-core",
+ "serde",
  "tokio",
  "tracing",
 ]
