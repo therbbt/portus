@@ -313,7 +313,6 @@
   <TitleBar />
   <div class="action-bar">
     <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
-      <span class="rail-title">Hosts</span>
       <NewConnectionMenu
         on:newSsh={openSshDialog}
         on:newRdp={openRdpDialog}
@@ -463,15 +462,7 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 0.4rem 0 0.5rem;
-  }
-  .rail-title {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fg-tertiary);
+    padding: 0 0.4rem 0 0.3rem;
   }
   .action-bar-main {
     flex: 1;

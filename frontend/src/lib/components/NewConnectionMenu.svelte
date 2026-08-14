@@ -66,10 +66,11 @@
 {/if}
 
 <style>
-  /* Matches FlashPad's ActionToolbar .toolbar-btn exactly (icon + label +
-     caret, 22px tall) — this dropdown trigger is the same kind of control
-     as FlashPad's "Notes"/"Insert" toolbar buttons, just wired to a
-     different menu. */
+  /* Matches FlashPad's ActionToolbar .toolbar-btn exactly — not just shape
+     (icon + label + caret, 22px tall) but tier: FlashPad's --muted/--panel-2
+     map to Portus's --fg-secondary/--surface-2, NOT --fg-tertiary/--surface-3
+     (those are a shade dimmer/lighter and were the actual reason this
+     looked off — same shape, wrong tier). */
   .toolbar-btn {
     flex-shrink: 0;
     display: flex;
@@ -80,14 +81,14 @@
     border-radius: var(--radius-sm);
     padding: 0 0.4rem;
     background: transparent;
-    color: var(--fg-tertiary);
+    color: var(--fg-secondary);
     font-size: 0.8rem;
     line-height: 1;
     cursor: pointer;
   }
   .toolbar-btn:hover,
   .toolbar-btn.active {
-    background: var(--surface-3);
+    background: var(--surface-2);
     color: var(--fg-primary);
   }
   .toolbar-btn .caret {
@@ -98,7 +99,7 @@
     position: fixed;
     z-index: 1000;
     min-width: 170px;
-    background: var(--surface-2);
+    background: var(--surface-1);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -120,6 +121,6 @@
     cursor: pointer;
   }
   .item:hover {
-    background: var(--surface-3);
+    background: var(--surface-2);
   }
 </style>
