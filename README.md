@@ -25,8 +25,8 @@ than a heavyweight IDE.
   host's details later without retyping its password (only its handle is
   kept in the OS keychain — password/passphrase can be left blank on edit
   to keep the stored value).
-- **Settings** for the terminal's font family and size, applied live to
-  every open and future tab.
+- **Settings** for the terminal's font family and size, applied to every
+  new tab opened afterward.
 - A window, sidebar, and unified action bar styled to match FlashPad, a
   sibling app, including the resizable sidebar, transparent rounded window
   chrome, and matching accent color.
