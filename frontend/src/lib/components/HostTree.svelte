@@ -209,7 +209,7 @@
                 <span class="host-name">{host.name}</span>
                 <span class="host-meta">{protocolLabel[host.protocol]} · {host.address}</span>
               </button>
-              {#if host.protocol === "ssh" || host.protocol === "serial"}
+              {#if host.protocol === "ssh" || host.protocol === "serial" || host.protocol === "shell"}
                 <span
                   class="row-action"
                   role="button"
@@ -245,7 +245,7 @@
             <span class="host-name">{host.name}</span>
             <span class="host-meta">{protocolLabel[host.protocol]} · {host.address}</span>
           </button>
-          {#if host.protocol === "ssh" || host.protocol === "serial"}
+          {#if host.protocol === "ssh" || host.protocol === "serial" || host.protocol === "shell"}
             <span
               class="row-action"
               role="button"

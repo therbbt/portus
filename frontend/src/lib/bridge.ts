@@ -41,10 +41,22 @@ export interface RdpConnectOptions {
   domain?: string | null;
 }
 
-export type SessionOptions = SshConnectOptions | SerialConnectOptions | RdpConnectOptions | undefined;
+/** Both fields optional — an empty object behaves like the old hardcoded
+ * $SHELL-in-$HOME default. Only meaningful for a saved shell preset; an
+ * ad-hoc "Local shell" tab still opens with no options at all. */
+export interface ShellConnectOptions {
+  shellCommand?: string | null;
+  workingDir?: string | null;
+}
 
-export async function openSession(protocol: Protocol, options?: SessionOptions): Promise<string> {
-  return invoke<string>("session_open", { protocol, options: options ?? null });
+export type SessionOptions = SshConnectOptions | SerialConnectOptions | RdpConnectOptions | ShellConnectOptions | undefined;
+
+/** `hostId` is set only when this tab is a saved host's session — it's what
+ * unlocks scrollback persistence for a saved shell preset on the backend
+ * (see portus_core::scrollback). An ad-hoc tab has no stable identity to
+ * persist scrollback under, so it's omitted for those. */
+export async function openSession(protocol: Protocol, options?: SessionOptions, hostId?: string): Promise<string> {
+  return invoke<string>("session_open", { protocol, options: options ?? null, hostId: hostId ?? null });
 }
 
 export async function listSerialPorts(): Promise<string[]> {
@@ -73,6 +85,10 @@ export interface Host {
   username?: string | null;
   baudRate?: number | null;
   auth: AuthMethodDto;
+  /** Shell-only. */
+  shellCommand?: string | null;
+  /** Shell-only. */
+  workingDir?: string | null;
 }
 
 export interface Group {
@@ -117,6 +133,8 @@ export interface SaveHostInput {
   username?: string | null;
   baudRate?: number | null;
   auth: AuthInput;
+  shellCommand?: string | null;
+  workingDir?: string | null;
 }
 
 export async function saveHost(input: SaveHostInput): Promise<PortusConfig> {

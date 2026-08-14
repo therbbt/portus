@@ -6,6 +6,7 @@
     newRdp: void;
     newSerial: void;
     newShell: void;
+    newShellPreset: void;
   }>();
 
   let open = false;
@@ -25,7 +26,7 @@
     open = true;
   }
 
-  function pick(event: "newSsh" | "newRdp" | "newSerial" | "newShell") {
+  function pick(event: "newSsh" | "newRdp" | "newSerial" | "newShell" | "newShellPreset") {
     open = false;
     dispatch(event);
   }
@@ -62,6 +63,7 @@
     <button class="item" role="menuitem" on:click={() => pick("newRdp")}>RDP connection</button>
     <button class="item" role="menuitem" on:click={() => pick("newSerial")}>Serial connection</button>
     <button class="item" role="menuitem" on:click={() => pick("newShell")}>Local shell</button>
+    <button class="item" role="menuitem" on:click={() => pick("newShellPreset")}>Terminal preset…</button>
   </div>
 {/if}
 
