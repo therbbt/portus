@@ -1,7 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
-  import type { SerialConnectOptions, SaveRequest } from "../bridge";
+  import type { SerialConnectOptions, SaveRequest, Host } from "../bridge";
   import { listSerialPorts } from "../bridge";
+
+  /** When set, prefills the form from an existing saved host and treats
+   * submit as an edit (saveHost overwrites it in place) rather than a new
+   * save. Serial hosts carry no credential, so there's nothing to retype. */
+  export let editHost: Host | null = null;
 
   const dispatch = createEventDispatcher<{
     connect: { options: SerialConnectOptions; save: SaveRequest | null };
@@ -17,7 +22,16 @@
   let saveName = "";
   let panelEl: HTMLDivElement;
 
+  $: isEditing = !!editHost;
+
   onMount(async () => {
+    if (editHost) {
+      portName = editHost.address;
+      baudRate = editHost.baudRate ?? 9600;
+      saveConnection = true;
+      saveName = editHost.name;
+    }
+
     try {
       availablePorts = await listSerialPorts();
       if (!portName && availablePorts.length > 0) {
@@ -34,7 +48,7 @@
   function submit() {
     if (!canSubmit) return;
     const options: SerialConnectOptions = { portName: portName.trim(), baudRate };
-    dispatch("connect", { options, save: saveConnection ? { name: saveName.trim() } : null });
+    dispatch("connect", { options, save: saveConnection ? { id: editHost?.id, name: saveName.trim() } : null });
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -58,8 +72,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" on:mousedown={handleOutsideClick}>
-  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label="New serial connection">
-    <h2 class="title">New serial connection</h2>
+  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit serial connection" : "New serial connection"}>
+    <h2 class="title">{isEditing ? "Edit serial connection" : "New serial connection"}</h2>
 
     <label class="field">
       <span>Port</span>
@@ -94,7 +108,7 @@
 
     <label class="checkbox-field">
       <input type="checkbox" bind:checked={saveConnection} />
-      <span>Save this connection</span>
+      <span>{isEditing ? "Save changes to this host" : "Save this connection"}</span>
     </label>
     {#if saveConnection}
       <label class="field">
