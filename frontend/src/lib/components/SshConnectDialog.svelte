@@ -1,9 +1,17 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
-  import type { SshConnectOptions, SaveRequest } from "../bridge";
+  import { createEventDispatcher, onMount } from "svelte";
+  import type { SshConnectOptions, SaveRequest, AuthInput, Host } from "../bridge";
+  import { resolveHostSecret } from "../bridge";
+
+  /** When set, prefills the form from an existing saved host and treats
+   * submit as an edit (saveHost overwrites it in place) rather than a new
+   * save. Password auth can be left blank to keep the stored password
+   * without retyping it — private-key path/passphrase are always sent as
+   * typed, same as creating a new host. */
+  export let editHost: Host | null = null;
 
   const dispatch = createEventDispatcher<{
-    connect: { options: SshConnectOptions; save: SaveRequest | null };
+    connect: { options: SshConnectOptions; save: SaveRequest | null; authInput: AuthInput };
     cancel: void;
   }>();
 
@@ -19,24 +27,59 @@
 
   let panelEl: HTMLDivElement;
 
+  $: isEditing = !!editHost;
+  // Blank password only means "keep the stored one" when the host was
+  // already password-authed — switching tabs while editing means there's
+  // nothing old to fall back to, so a real value is required either way.
+  $: originalIsPassword = isEditing && editHost?.auth.type === "password";
+  $: passwordUnchanged = originalIsPassword && authMethod === "password" && password.length === 0;
+
+  onMount(() => {
+    if (!editHost) return;
+    host = editHost.address;
+    port = editHost.port ?? 22;
+    username = editHost.username ?? "";
+    saveConnection = true;
+    saveName = editHost.name;
+    if (editHost.auth.type === "privateKey") {
+      authMethod = "privateKey";
+      keyPath = editHost.auth.path ?? "";
+    } else {
+      authMethod = "password";
+    }
+  });
+
   $: canSubmit =
     host.trim().length > 0 &&
     username.trim().length > 0 &&
-    (authMethod === "password" ? password.length > 0 : keyPath.trim().length > 0) &&
+    (authMethod === "password" ? password.length > 0 || passwordUnchanged : keyPath.trim().length > 0) &&
     (!saveConnection || saveName.trim().length > 0);
 
-  function submit() {
+  function buildAuthInput(): AuthInput {
+    if (authMethod === "password") {
+      return passwordUnchanged ? { type: "unchanged" } : { type: "password", password };
+    }
+    return { type: "privateKey", path: keyPath.trim(), passphrase: passphrase || null };
+  }
+
+  async function submit() {
     if (!canSubmit) return;
-    const options: SshConnectOptions = {
-      host: host.trim(),
-      port,
-      username: username.trim(),
-      auth:
-        authMethod === "password"
-          ? { type: "password", password }
-          : { type: "privateKey", path: keyPath.trim(), passphrase: passphrase || null },
-    };
-    dispatch("connect", { options, save: saveConnection ? { name: saveName.trim() } : null });
+    const authInput = buildAuthInput();
+    let connectAuth: SshConnectOptions["auth"];
+    if (authInput.type === "unchanged" && editHost) {
+      const secret = await resolveHostSecret(editHost.id).catch(() => null);
+      connectAuth = { type: "password", password: secret ?? "" };
+    } else if (authMethod === "password") {
+      connectAuth = { type: "password", password };
+    } else {
+      connectAuth = { type: "privateKey", path: keyPath.trim(), passphrase: passphrase || null };
+    }
+    const options: SshConnectOptions = { host: host.trim(), port, username: username.trim(), auth: connectAuth };
+    dispatch("connect", {
+      options,
+      save: saveConnection ? { id: editHost?.id, name: saveName.trim() } : null,
+      authInput,
+    });
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -60,8 +103,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" on:mousedown={handleOutsideClick}>
-  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label="New SSH connection">
-    <h2 class="title">New SSH connection</h2>
+  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit SSH connection" : "New SSH connection"}>
+    <h2 class="title">{isEditing ? "Edit SSH connection" : "New SSH connection"}</h2>
 
     <div class="row split">
       <label class="field grow">
@@ -106,7 +149,7 @@
     {#if authMethod === "password"}
       <label class="field">
         <span>Password</span>
-        <input type="password" bind:value={password} />
+        <input type="password" bind:value={password} placeholder={originalIsPassword ? "Leave blank to keep existing password" : ""} />
       </label>
     {:else}
       <label class="field">
@@ -117,11 +160,14 @@
         <span>Passphrase (optional)</span>
         <input type="password" bind:value={passphrase} />
       </label>
+      {#if isEditing}
+        <p class="hint">Retype the passphrase to keep it — it isn't carried over automatically.</p>
+      {/if}
     {/if}
 
     <label class="checkbox-field">
       <input type="checkbox" bind:checked={saveConnection} />
-      <span>Save this connection</span>
+      <span>{isEditing ? "Save changes to this host" : "Save this connection"}</span>
     </label>
     {#if saveConnection}
       <label class="field">
