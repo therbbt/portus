@@ -35,7 +35,7 @@
     state: SessionState;
     sessionId: string | null;
     options?: SessionOptions;
-    /** Reserves a slot in the "Local Shell N" sequence; freed when the tab closes. */
+    /** Reserves a slot in the "Terminal N" sequence; freed when the tab closes. */
     shellNumber?: number;
     /** Once the user renames a tab, session-driven title updates stop overwriting it. */
     renamed?: boolean;
@@ -57,8 +57,17 @@
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   $: activeSshOptions = activeTab?.protocol === "ssh" ? (activeTab.options as SshConnectOptions) : null;
 
+  // Keeps the same fallback chain tokens.css ships by default — replacing
+  // --font-mono with just the chosen family (no fallbacks) meant that if it
+  // isn't actually installed, the browser silently substitutes a
+  // proportional font while xterm.js still lays out cells at the fixed
+  // width it assumed for a monospace font, producing visibly gapped text.
   function applyTerminalFontVars(settings: PortusConfig["settings"]) {
-    document.documentElement.style.setProperty("--font-mono", settings.terminalFontFamily);
+    const family = settings.terminalFontFamily.replace(/"/g, '\\"');
+    document.documentElement.style.setProperty(
+      "--font-mono",
+      `"${family}", "Cascadia Code", "Cascadia Mono", ui-monospace, Consolas, monospace`,
+    );
     document.documentElement.style.setProperty("--font-size-terminal", `${settings.terminalFontSize}px`);
   }
 
@@ -101,7 +110,7 @@
     const tab: Tab = {
       id,
       protocol: "shell",
-      title: `Local Shell ${shellNumber}`,
+      title: `Terminal ${shellNumber}`,
       state: "connecting",
       sessionId: null,
       shellNumber,

@@ -58,7 +58,9 @@
         on:click={() => dispatch("select", { id: tab.id })}
         on:keydown={(e) => e.key === "Enter" && dispatch("select", { id: tab.id })}
       >
-        <span class="status-dot" data-state={tab.state}></span>
+        {#if tab.id === activeId}
+          <span class="status-dot" data-state={tab.state}></span>
+        {/if}
         {#if editingId === tab.id}
           <input
             class="tab-title-input"
