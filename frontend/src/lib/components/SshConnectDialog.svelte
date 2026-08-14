@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
-  import type { SshConnectOptions, SaveRequest, AuthInput, Host } from "../bridge";
+  import type { SshConnectOptions, AuthInput, Host, Group, SaveHostInput } from "../bridge";
   import { resolveHostSecret } from "../bridge";
 
   /** When set, prefills the form from an existing saved host and treats
@@ -9,9 +9,11 @@
    * without retyping it — private-key path/passphrase are always sent as
    * typed, same as creating a new host. */
   export let editHost: Host | null = null;
+  export let groups: Group[] = [];
 
   const dispatch = createEventDispatcher<{
-    connect: { options: SshConnectOptions; save: SaveRequest | null; authInput: AuthInput };
+    connect: { options: SshConnectOptions; save: SaveHostInput | null };
+    save: SaveHostInput;
     cancel: void;
   }>();
 
@@ -22,8 +24,8 @@
   let password = "";
   let keyPath = "";
   let passphrase = "";
-  let saveConnection = false;
   let saveName = "";
+  let groupId = "";
 
   let panelEl: HTMLDivElement;
 
@@ -39,8 +41,8 @@
     host = editHost.address;
     port = editHost.port ?? 22;
     username = editHost.username ?? "";
-    saveConnection = true;
     saveName = editHost.name;
+    groupId = editHost.groupId ?? "";
     if (editHost.auth.type === "privateKey") {
       authMethod = "privateKey";
       keyPath = editHost.auth.path ?? "";
@@ -49,11 +51,14 @@
     }
   });
 
-  $: canSubmit =
+  // The core fields needed either to connect or to save — a name is only
+  // required for saving, not for a one-off connection.
+  $: coreValid =
     host.trim().length > 0 &&
     username.trim().length > 0 &&
-    (authMethod === "password" ? password.length > 0 || passwordUnchanged : keyPath.trim().length > 0) &&
-    (!saveConnection || saveName.trim().length > 0);
+    (authMethod === "password" ? password.length > 0 || passwordUnchanged : keyPath.trim().length > 0);
+  $: canConnect = coreValid;
+  $: canSave = coreValid && saveName.trim().length > 0;
 
   function buildAuthInput(): AuthInput {
     if (authMethod === "password") {
@@ -62,8 +67,21 @@
     return { type: "privateKey", path: keyPath.trim(), passphrase: passphrase || null };
   }
 
-  async function submit() {
-    if (!canSubmit) return;
+  function buildSaveInput(authInput: AuthInput): SaveHostInput {
+    return {
+      id: editHost?.id,
+      name: saveName.trim(),
+      groupId: groupId || null,
+      protocol: "ssh",
+      address: host.trim(),
+      port,
+      username: username.trim(),
+      auth: authInput,
+    };
+  }
+
+  async function connect() {
+    if (!canConnect) return;
     const authInput = buildAuthInput();
     let connectAuth: SshConnectOptions["auth"];
     if (authInput.type === "unchanged" && editHost) {
@@ -77,9 +95,13 @@
     const options: SshConnectOptions = { host: host.trim(), port, username: username.trim(), auth: connectAuth };
     dispatch("connect", {
       options,
-      save: saveConnection ? { id: editHost?.id, name: saveName.trim() } : null,
-      authInput,
+      save: canSave ? buildSaveInput(authInput) : null,
     });
+  }
+
+  function saveOnly() {
+    if (!canSave) return;
+    dispatch("save", buildSaveInput(buildAuthInput()));
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -88,7 +110,7 @@
       dispatch("cancel");
     } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey || document.activeElement?.tagName !== "INPUT")) {
       event.preventDefault();
-      submit();
+      connect();
     }
   }
 
@@ -165,26 +187,32 @@
       {/if}
     {/if}
 
-    <label class="checkbox-field">
-      <input type="checkbox" bind:checked={saveConnection} />
-      <span>{isEditing ? "Save changes to this host" : "Save this connection"}</span>
-    </label>
-    {#if saveConnection}
-      <label class="field">
-        <span>Name</span>
+    <div class="row split">
+      <label class="field grow">
+        <span>Name (to save it)</span>
         <input type="text" bind:value={saveName} placeholder={username && host ? `${username}@${host}` : "My server"} />
       </label>
-    {/if}
+      <label class="field narrow">
+        <span>Folder</span>
+        <select bind:value={groupId}>
+          <option value="">None</option>
+          {#each groups as group (group.id)}
+            <option value={group.id}>{group.name}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
 
     <p class="hint">
-      {saveConnection
+      {saveName.trim()
         ? "The credential above goes in your OS keychain, not this config file."
-        : "Credentials aren't saved — you'll be asked again next time."}
+        : "Leave the name blank for a one-off connection that isn't saved."}
     </p>
 
     <div class="actions">
       <button class="btn" on:click={() => dispatch("cancel")}>Cancel</button>
-      <button class="btn primary" disabled={!canSubmit} on:click={submit}>Connect</button>
+      <button class="btn" disabled={!canSave} on:click={saveOnly}>Save</button>
+      <button class="btn primary" disabled={!canConnect} on:click={connect}>Connect</button>
     </div>
   </div>
 </div>
@@ -237,7 +265,8 @@
     width: 90px;
   }
 
-  input {
+  input,
+  select {
     background: var(--surface-1);
     border: none;
     border-radius: var(--radius-sm);
@@ -245,7 +274,8 @@
     color: var(--fg-primary);
     font-size: 0.8rem;
   }
-  input:focus-visible {
+  input:focus-visible,
+  select:focus-visible {
     box-shadow: 0 0 0 2px var(--accent);
   }
 
@@ -269,19 +299,6 @@
   .toggle-btn.active {
     background: var(--surface-3);
     color: var(--fg-primary);
-  }
-
-  .checkbox-field {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.75rem;
-    color: var(--fg-secondary);
-    cursor: pointer;
-  }
-  .checkbox-field input {
-    padding: 0;
-    accent-color: var(--accent);
   }
 
   .hint {

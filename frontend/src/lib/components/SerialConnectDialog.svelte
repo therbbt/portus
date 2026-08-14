@@ -1,15 +1,17 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
-  import type { SerialConnectOptions, SaveRequest, Host } from "../bridge";
+  import type { SerialConnectOptions, Host, Group, SaveHostInput } from "../bridge";
   import { listSerialPorts } from "../bridge";
 
   /** When set, prefills the form from an existing saved host and treats
    * submit as an edit (saveHost overwrites it in place) rather than a new
    * save. Serial hosts carry no credential, so there's nothing to retype. */
   export let editHost: Host | null = null;
+  export let groups: Group[] = [];
 
   const dispatch = createEventDispatcher<{
-    connect: { options: SerialConnectOptions; save: SaveRequest | null };
+    connect: { options: SerialConnectOptions; save: SaveHostInput | null };
+    save: SaveHostInput;
     cancel: void;
   }>();
 
@@ -18,8 +20,8 @@
   let portName = "";
   let baudRate = 9600;
   let availablePorts: string[] = [];
-  let saveConnection = false;
   let saveName = "";
+  let groupId = "";
   let panelEl: HTMLDivElement;
 
   $: isEditing = !!editHost;
@@ -28,8 +30,8 @@
     if (editHost) {
       portName = editHost.address;
       baudRate = editHost.baudRate ?? 9600;
-      saveConnection = true;
       saveName = editHost.name;
+      groupId = editHost.groupId ?? "";
     }
 
     try {
@@ -43,12 +45,31 @@
     }
   });
 
-  $: canSubmit = portName.trim().length > 0 && baudRate > 0 && (!saveConnection || saveName.trim().length > 0);
+  $: coreValid = portName.trim().length > 0 && baudRate > 0;
+  $: canConnect = coreValid;
+  $: canSave = coreValid && saveName.trim().length > 0;
 
-  function submit() {
-    if (!canSubmit) return;
+  function buildSaveInput(): SaveHostInput {
+    return {
+      id: editHost?.id,
+      name: saveName.trim(),
+      groupId: groupId || null,
+      protocol: "serial",
+      address: portName.trim(),
+      baudRate,
+      auth: { type: "none" },
+    };
+  }
+
+  function connect() {
+    if (!canConnect) return;
     const options: SerialConnectOptions = { portName: portName.trim(), baudRate };
-    dispatch("connect", { options, save: saveConnection ? { id: editHost?.id, name: saveName.trim() } : null });
+    dispatch("connect", { options, save: canSave ? buildSaveInput() : null });
+  }
+
+  function saveOnly() {
+    if (!canSave) return;
+    dispatch("save", buildSaveInput());
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -57,7 +78,7 @@
       dispatch("cancel");
     } else if (event.key === "Enter" && document.activeElement?.tagName !== "SELECT") {
       event.preventDefault();
-      submit();
+      connect();
     }
   }
 
@@ -106,20 +127,29 @@
       </datalist>
     </label>
 
-    <label class="checkbox-field">
-      <input type="checkbox" bind:checked={saveConnection} />
-      <span>{isEditing ? "Save changes to this host" : "Save this connection"}</span>
-    </label>
-    {#if saveConnection}
-      <label class="field">
-        <span>Name</span>
+    <div class="row split">
+      <label class="field grow">
+        <span>Name (to save it)</span>
         <input type="text" bind:value={saveName} placeholder={portName || "My device"} />
       </label>
+      <label class="field narrow">
+        <span>Folder</span>
+        <select bind:value={groupId}>
+          <option value="">None</option>
+          {#each groups as group (group.id)}
+            <option value={group.id}>{group.name}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+    {#if !saveName.trim()}
+      <p class="hint">Leave the name blank for a one-off connection that isn't saved.</p>
     {/if}
 
     <div class="actions">
       <button class="btn" on:click={() => dispatch("cancel")}>Cancel</button>
-      <button class="btn primary" disabled={!canSubmit} on:click={submit}>Connect</button>
+      <button class="btn" disabled={!canSave} on:click={saveOnly}>Save</button>
+      <button class="btn primary" disabled={!canConnect} on:click={connect}>Connect</button>
     </div>
   </div>
 </div>
@@ -153,6 +183,11 @@
     color: var(--fg-primary);
   }
 
+  .row.split {
+    display: flex;
+    gap: var(--space-2);
+  }
+
   .field {
     display: flex;
     flex-direction: column;
@@ -160,8 +195,15 @@
     font-size: 0.72rem;
     color: var(--fg-secondary);
   }
+  .field.grow {
+    flex: 1;
+  }
+  .field.narrow {
+    width: 90px;
+  }
 
-  input {
+  input,
+  select {
     background: var(--surface-1);
     border: none;
     border-radius: var(--radius-sm);
@@ -169,21 +211,9 @@
     color: var(--fg-primary);
     font-size: 0.8rem;
   }
-  input:focus-visible {
+  input:focus-visible,
+  select:focus-visible {
     box-shadow: 0 0 0 2px var(--accent);
-  }
-
-  .checkbox-field {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.75rem;
-    color: var(--fg-secondary);
-    cursor: pointer;
-  }
-  .checkbox-field input {
-    padding: 0;
-    accent-color: var(--accent);
   }
 
   .hint {

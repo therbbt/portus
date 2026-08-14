@@ -20,12 +20,21 @@
     SshConnectOptions,
     SerialConnectOptions,
     RdpConnectOptions,
-    SaveRequest,
+    SaveHostInput,
     Host,
+    Group,
     PortusConfig,
-    AuthInput,
   } from "../bridge";
-  import { getConfig, saveConfig, saveHost, deleteHost, resolveHostSecret } from "../bridge";
+  import {
+    getConfig,
+    saveConfig,
+    saveHost,
+    deleteHost,
+    resolveHostSecret,
+    saveGroup,
+    deleteGroup,
+    setGroupCollapsed,
+  } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
 
   interface Tab {
@@ -49,6 +58,7 @@
   let showSftpPanel = false;
   let showSettingsPanel = false;
   let hosts: Host[] = [];
+  let groups: Group[] = [];
   let editingSshHost: Host | null = null;
   let editingSerialHost: Host | null = null;
   let sidebarWidth = 260;
@@ -87,6 +97,7 @@
     try {
       config = await getConfig();
       hosts = config.hosts;
+      groups = config.groups;
       applyTerminalFontVars(config.settings);
     } catch {
       // No persisted config yet (first launch) — the rail just stays empty.
@@ -142,22 +153,14 @@
     showSshDialog = true;
   }
 
-  async function onSshConnect(detail: { options: SshConnectOptions; save: SaveRequest | null; authInput: AuthInput }) {
+  async function onSshConnect(detail: { options: SshConnectOptions; save: SaveHostInput | null }) {
     showSshDialog = false;
     editingSshHost = null;
-    const { options, save, authInput } = detail;
+    const { options, save } = detail;
     openTab("ssh", `${options.username}@${options.host}`, options);
 
     if (save) {
-      const result = await saveHost({
-        id: save.id,
-        name: save.name,
-        protocol: "ssh",
-        address: options.host,
-        port: options.port,
-        username: options.username,
-        auth: authInput,
-      });
+      const result = await saveHost(save);
       hosts = result.hosts;
     }
   }
@@ -166,23 +169,27 @@
     showSerialDialog = true;
   }
 
-  async function onSerialConnect(detail: { options: SerialConnectOptions; save: SaveRequest | null }) {
+  async function onSerialConnect(detail: { options: SerialConnectOptions; save: SaveHostInput | null }) {
     showSerialDialog = false;
     editingSerialHost = null;
     const { options, save } = detail;
     openTab("serial", options.portName, options);
 
     if (save) {
-      const result = await saveHost({
-        id: save.id,
-        name: save.name,
-        protocol: "serial",
-        address: options.portName,
-        baudRate: options.baudRate,
-        auth: { type: "none" },
-      });
+      const result = await saveHost(save);
       hosts = result.hosts;
     }
+  }
+
+  /** From a connect dialog's standalone "Save" button — persists the host
+   * without opening a tab or connecting to it at all. */
+  async function onSaveHostOnly(input: SaveHostInput) {
+    showSshDialog = false;
+    showSerialDialog = false;
+    editingSshHost = null;
+    editingSerialHost = null;
+    const result = await saveHost(input);
+    hosts = result.hosts;
   }
 
   function onEditHost(host: Host) {
@@ -193,6 +200,29 @@
       editingSerialHost = host;
       showSerialDialog = true;
     }
+  }
+
+  async function onCreateFolder(name: string) {
+    const result = await saveGroup({ name });
+    groups = result.groups;
+  }
+
+  async function onRenameFolder(id: string, name: string) {
+    const existing = groups.find((g) => g.id === id);
+    const result = await saveGroup({ id, name, parentId: existing?.parentId ?? null });
+    groups = result.groups;
+  }
+
+  async function onDeleteFolder(group: Group) {
+    const result = await deleteGroup(group.id);
+    groups = result.groups;
+    hosts = result.hosts;
+  }
+
+  async function onToggleFolder(group: Group) {
+    const collapsed = !group.collapsed;
+    groups = groups.map((g) => (g.id === group.id ? { ...g, collapsed } : g));
+    await setGroupCollapsed(group.id, collapsed);
   }
 
   function openRdpDialog() {
@@ -307,6 +337,7 @@
   <div class="body">
     <HostTree
       {hosts}
+      {groups}
       width={sidebarWidth}
       on:newShell={newShellTab}
       on:newSsh={openSshDialog}
@@ -315,6 +346,10 @@
       on:connect={(e) => connectToSavedHost(e.detail)}
       on:deleteHost={(e) => onDeleteHost(e.detail)}
       on:editHost={(e) => onEditHost(e.detail)}
+      on:createFolder={(e) => onCreateFolder(e.detail.name)}
+      on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
+      on:deleteFolder={(e) => onDeleteFolder(e.detail)}
+      on:toggleFolder={(e) => onToggleFolder(e.detail)}
     />
     <SidebarResizer bind:width={sidebarWidth} />
     <div class="main">
@@ -353,7 +388,9 @@
   {#if showSshDialog}
     <SshConnectDialog
       editHost={editingSshHost}
+      {groups}
       on:connect={(e) => onSshConnect(e.detail)}
+      on:save={(e) => onSaveHostOnly(e.detail)}
       on:cancel={() => {
         showSshDialog = false;
         editingSshHost = null;
@@ -363,7 +400,9 @@
   {#if showSerialDialog}
     <SerialConnectDialog
       editHost={editingSerialHost}
+      {groups}
       on:connect={(e) => onSerialConnect(e.detail)}
+      on:save={(e) => onSaveHostOnly(e.detail)}
       on:cancel={() => {
         showSerialDialog = false;
         editingSerialHost = null;
