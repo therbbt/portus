@@ -54,7 +54,8 @@ pub struct Host {
     #[serde(default)]
     pub group_id: Option<Uuid>,
     pub protocol: Protocol,
-    /// Hostname/IP for network protocols, device path for serial.
+    /// Hostname/IP for network protocols, device path for serial. Unused
+    /// (empty string) for a saved local-shell preset — see `shell_command`.
     pub address: String,
     #[serde(default)]
     pub port: Option<u16>,
@@ -64,6 +65,14 @@ pub struct Host {
     pub baud_rate: Option<u32>,
     #[serde(default)]
     pub auth: AuthMethod,
+    /// Local-shell-only: overrides `$SHELL`/`$COMSPEC` when set. Ignored by
+    /// every other protocol.
+    #[serde(default)]
+    pub shell_command: Option<String>,
+    /// Local-shell-only: overrides `$HOME` as the starting directory when
+    /// set. Ignored by every other protocol.
+    #[serde(default)]
+    pub working_dir: Option<String>,
 }
 
 /// Never holds a literal secret — only handles into the OS keychain (see

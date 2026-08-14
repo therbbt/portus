@@ -9,6 +9,7 @@
   import EmptyMainArea from "./EmptyMainArea.svelte";
   import SshConnectDialog from "./SshConnectDialog.svelte";
   import SerialConnectDialog from "./SerialConnectDialog.svelte";
+  import ShellConnectDialog from "./ShellConnectDialog.svelte";
   import RdpConnectDialog from "./RdpConnectDialog.svelte";
   import RdpView from "./RdpView.svelte";
   import SftpPanel from "./SftpPanel.svelte";
@@ -21,6 +22,7 @@
     SessionOptions,
     SshConnectOptions,
     SerialConnectOptions,
+    ShellConnectOptions,
     RdpConnectOptions,
     SaveHostInput,
     Host,
@@ -46,6 +48,9 @@
     state: SessionState;
     sessionId: string | null;
     options?: SessionOptions;
+    /** Set only for a saved host's session — unlocks scrollback persistence
+     * for a saved shell preset (see Terminal.svelte's hostId prop). */
+    hostId?: string;
     /** Reserves a slot in the "Terminal N" sequence; freed when the tab closes. */
     shellNumber?: number;
     /** Once the user renames a tab, session-driven title updates stop overwriting it. */
@@ -56,6 +61,7 @@
   let activeTabId: string | null = null;
   let showSshDialog = false;
   let showSerialDialog = false;
+  let showShellPresetDialog = false;
   let showRdpDialog = false;
   let showSftpPanel = false;
   let showSettingsPanel = false;
@@ -64,6 +70,7 @@
   let groups: Group[] = [];
   let editingSshHost: Host | null = null;
   let editingSerialHost: Host | null = null;
+  let editingShellHost: Host | null = null;
   let sidebarWidth = 260;
   let config: PortusConfig | null = null;
 
@@ -145,9 +152,9 @@
     activeTabId = id;
   }
 
-  function openTab(protocol: Protocol, title: string, options: SessionOptions) {
+  function openTab(protocol: Protocol, title: string, options: SessionOptions, hostId?: string) {
     const id = crypto.randomUUID();
-    const tab: Tab = { id, protocol, title, state: "connecting", sessionId: null, options };
+    const tab: Tab = { id, protocol, title, state: "connecting", sessionId: null, options, hostId };
     tabs = [...tabs, tab];
     activeTabId = id;
   }
@@ -189,8 +196,10 @@
   async function onSaveHostOnly(input: SaveHostInput) {
     showSshDialog = false;
     showSerialDialog = false;
+    showShellPresetDialog = false;
     editingSshHost = null;
     editingSerialHost = null;
+    editingShellHost = null;
     const result = await saveHost(input);
     hosts = result.hosts;
   }
@@ -202,6 +211,25 @@
     } else if (host.protocol === "serial") {
       editingSerialHost = host;
       showSerialDialog = true;
+    } else if (host.protocol === "shell") {
+      editingShellHost = host;
+      showShellPresetDialog = true;
+    }
+  }
+
+  async function onShellPresetConnect(detail: { options: ShellConnectOptions; save: SaveHostInput | null }) {
+    showShellPresetDialog = false;
+    editingShellHost = null;
+    const { options, save } = detail;
+    const title = save?.name ?? options.shellCommand ?? "Terminal";
+    // save.id is generated client-side by ShellConnectDialog, so it's known
+    // here immediately rather than only after the save round-trip resolves
+    // — opening the tab doesn't need to wait on that.
+    openTab("shell", title, options, save?.id ?? undefined);
+
+    if (save) {
+      const result = await saveHost(save);
+      hosts = result.hosts;
     }
   }
 
@@ -255,6 +283,9 @@
     } else if (host.protocol === "serial") {
       const options: SerialConnectOptions = { portName: host.address, baudRate: host.baudRate ?? undefined };
       openTab("serial", host.name, options);
+    } else if (host.protocol === "shell") {
+      const options: ShellConnectOptions = { shellCommand: host.shellCommand ?? null, workingDir: host.workingDir ?? null };
+      openTab("shell", host.name, options, host.id);
     } else if (host.protocol === "rdp") {
       // No UI saves an RDP host yet (see RdpConnectDialog) — this only
       // matters for a hand-edited config.json, which the format allows.
@@ -320,11 +351,12 @@
         on:newRdp={openRdpDialog}
         on:newSerial={openSerialDialog}
         on:newShell={newShellTab}
+        on:newShellPreset={() => (showShellPresetDialog = true)}
       />
     </div>
     <div class="action-bar-main">
       <TabStrip
-        tabs={tabs.map((t) => ({ id: t.id, title: t.title }))}
+        tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
         activeId={activeTabId}
         on:select={(e) => selectTab(e.detail.id)}
         on:close={(e) => closeTab(e.detail.id)}
@@ -371,6 +403,7 @@
             <Terminal
               protocol={tab.protocol}
               options={tab.options}
+              hostId={tab.hostId}
               active={tab.id === activeTabId}
               on:state={(e) => onState(tab.id, e.detail)}
               on:title={(e) => onTitle(tab.id, e.detail.title)}
@@ -411,6 +444,18 @@
       on:cancel={() => {
         showSerialDialog = false;
         editingSerialHost = null;
+      }}
+    />
+  {/if}
+  {#if showShellPresetDialog}
+    <ShellConnectDialog
+      editHost={editingShellHost}
+      {groups}
+      on:connect={(e) => onShellPresetConnect(e.detail)}
+      on:save={(e) => onSaveHostOnly(e.detail)}
+      on:cancel={() => {
+        showShellPresetDialog = false;
+        editingShellHost = null;
       }}
     />
   {/if}
