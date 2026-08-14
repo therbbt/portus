@@ -109,7 +109,6 @@
     padding: 0 var(--space-3);
     background: transparent;
     border: none;
-    border-bottom: 2px solid transparent;
     color: var(--fg-secondary);
     cursor: pointer;
     white-space: nowrap;
@@ -123,7 +122,6 @@
   .tab.active {
     background: var(--surface-2);
     color: var(--fg-primary);
-    border-bottom-color: var(--accent);
   }
   .status-dot {
     width: 6px;
