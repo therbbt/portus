@@ -42,9 +42,12 @@ export interface RdpConnectOptions {
 }
 
 /** Emitted alongside a connect dialog's `connect` event when the user
- * checked "save this connection" — just the display name, since everything
- * else needed to build the saved `Host` is already in the connect options. */
+ * checked "save this connection" — the display name plus everything else
+ * needed to build the saved `Host` is already in the connect options.
+ * `id` is set when editing an existing saved host, so the save overwrites
+ * it in place instead of creating a new entry. */
 export interface SaveRequest {
+  id?: string;
   name: string;
 }
 
@@ -100,9 +103,17 @@ export async function getConfig(): Promise<PortusConfig> {
   return invoke<PortusConfig>("get_config");
 }
 
-/** What save_host expects for the auth half — the raw secret, not a handle. */
+export async function saveConfig(config: PortusConfig): Promise<void> {
+  await invoke("save_config", { config });
+}
+
+/** What save_host expects for the auth half — the raw secret, not a handle.
+ * `unchanged` reuses whatever the host being edited already has stored,
+ * without touching the keychain — lets an edit dialog leave the credential
+ * field blank instead of forcing a retype on every edit. */
 export type AuthInput =
   | { type: "none" }
+  | { type: "unchanged" }
   | { type: "password"; password: string }
   | { type: "privateKey"; path: string; passphrase?: string | null };
 

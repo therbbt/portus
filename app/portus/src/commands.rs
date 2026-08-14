@@ -61,12 +61,18 @@ pub fn list_serial_ports() -> Vec<String> {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AuthInput {
     None,
+    /// Reuse whatever the host being edited already has stored — an edit
+    /// dialog sends this when its credential field was left blank, so a
+    /// hostname/username fix doesn't force retyping the password.
+    /// Meaningless (falls back to `None`) when saving a brand-new host.
+    Unchanged,
     Password { password: String },
     PrivateKey { path: String, passphrase: Option<String> },
 }
 
-fn resolve_auth(auth: AuthInput) -> Result<AuthMethod, String> {
+fn resolve_auth(auth: AuthInput, existing: Option<&AuthMethod>) -> Result<AuthMethod, String> {
     match auth {
+        AuthInput::Unchanged => Ok(existing.cloned().unwrap_or(AuthMethod::None)),
         AuthInput::None => Ok(AuthMethod::None),
         AuthInput::Password { password } => {
             let handle = portus_core::keychain::store(&password).map_err(|e| e.to_string())?;
@@ -82,10 +88,9 @@ fn resolve_auth(auth: AuthInput) -> Result<AuthMethod, String> {
     }
 }
 
-/// Creates or fully replaces a saved host. Always resolves a fresh
-/// `AuthMethod` from `auth` — there's no "keep the existing secret"
-/// affordance yet, since nothing in the UI edits a saved host's credential
-/// independently of retyping it.
+/// Creates or fully replaces a saved host. `auth` is usually a fresh secret
+/// to resolve into a new keychain entry, but can also be `Unchanged` to
+/// reuse the edited host's existing credential as-is.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn save_host(
@@ -102,15 +107,16 @@ pub fn save_host(
     let id = id.unwrap_or_else(Uuid::new_v4);
     let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
 
+    let existing_auth = config.hosts.iter().find(|h| h.id == id).map(|h| h.auth.clone());
+    let old_handle = existing_auth.as_ref().and_then(|a| a.credential_handle()).map(str::to_string);
+    let resolved_auth = resolve_auth(auth, existing_auth.as_ref())?;
+
     // Replacing a host's secret orphans its old keychain entry unless we
-    // clean it up ourselves.
-    if let Some(old_handle) = config
-        .hosts
-        .iter()
-        .find(|h| h.id == id)
-        .and_then(|h| h.auth.credential_handle())
-    {
-        let _ = portus_core::keychain::delete(old_handle);
+    // clean it up ourselves — but not when `Unchanged` just reused it.
+    if let Some(old) = &old_handle {
+        if resolved_auth.credential_handle() != Some(old.as_str()) {
+            let _ = portus_core::keychain::delete(old);
+        }
     }
 
     let host = Host {
@@ -122,7 +128,7 @@ pub fn save_host(
         port,
         username,
         baud_rate,
-        auth: resolve_auth(auth)?,
+        auth: resolved_auth,
     };
 
     if let Some(existing) = config.hosts.iter_mut().find(|h| h.id == id) {

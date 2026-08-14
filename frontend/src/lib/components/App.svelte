@@ -12,6 +12,7 @@
   import RdpConnectDialog from "./RdpConnectDialog.svelte";
   import RdpView from "./RdpView.svelte";
   import SftpPanel from "./SftpPanel.svelte";
+  import SettingsPanel from "./SettingsPanel.svelte";
   import type {
     Protocol,
     SessionState,
@@ -21,8 +22,10 @@
     RdpConnectOptions,
     SaveRequest,
     Host,
+    PortusConfig,
+    AuthInput,
   } from "../bridge";
-  import { getConfig, saveHost, deleteHost, resolveHostSecret } from "../bridge";
+  import { getConfig, saveConfig, saveHost, deleteHost, resolveHostSecret } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
 
   interface Tab {
@@ -44,16 +47,26 @@
   let showSerialDialog = false;
   let showRdpDialog = false;
   let showSftpPanel = false;
+  let showSettingsPanel = false;
   let hosts: Host[] = [];
+  let editingSshHost: Host | null = null;
+  let editingSerialHost: Host | null = null;
   let sidebarWidth = 260;
+  let config: PortusConfig | null = null;
 
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   $: activeSshOptions = activeTab?.protocol === "ssh" ? (activeTab.options as SshConnectOptions) : null;
 
+  function applyTerminalFontVars(settings: PortusConfig["settings"]) {
+    document.documentElement.style.setProperty("--font-mono", settings.terminalFontFamily);
+    document.documentElement.style.setProperty("--font-size-terminal", `${settings.terminalFontSize}px`);
+  }
+
   onMount(async () => {
     try {
-      const config = await getConfig();
+      config = await getConfig();
       hosts = config.hosts;
+      applyTerminalFontVars(config.settings);
     } catch {
       // No persisted config yet (first launch) — the rail just stays empty.
     }
@@ -62,6 +75,24 @@
     // same as opening a real terminal app.
     newShellTab();
   });
+
+  function openSettingsPanel() {
+    showSettingsPanel = true;
+  }
+
+  async function onSaveSettings(detail: { terminalFontFamily: string; terminalFontSize: number }) {
+    showSettingsPanel = false;
+    const next: PortusConfig = config ?? {
+      schemaVersion: 2,
+      groups: [],
+      hosts,
+      settings: { terminalFontFamily: "JetBrains Mono", terminalFontSize: 14 },
+    };
+    next.settings = detail;
+    await saveConfig(next);
+    config = next;
+    applyTerminalFontVars(next.settings);
+  }
 
   function newShellTab() {
     const id = crypto.randomUUID();
@@ -90,24 +121,23 @@
     showSshDialog = true;
   }
 
-  async function onSshConnect(detail: { options: SshConnectOptions; save: SaveRequest | null }) {
+  async function onSshConnect(detail: { options: SshConnectOptions; save: SaveRequest | null; authInput: AuthInput }) {
     showSshDialog = false;
-    const { options, save } = detail;
+    editingSshHost = null;
+    const { options, save, authInput } = detail;
     openTab("ssh", `${options.username}@${options.host}`, options);
 
     if (save) {
-      const config = await saveHost({
+      const result = await saveHost({
+        id: save.id,
         name: save.name,
         protocol: "ssh",
         address: options.host,
         port: options.port,
         username: options.username,
-        auth:
-          options.auth.type === "password"
-            ? { type: "password", password: options.auth.password }
-            : { type: "privateKey", path: options.auth.path, passphrase: options.auth.passphrase },
+        auth: authInput,
       });
-      hosts = config.hosts;
+      hosts = result.hosts;
     }
   }
 
@@ -117,18 +147,30 @@
 
   async function onSerialConnect(detail: { options: SerialConnectOptions; save: SaveRequest | null }) {
     showSerialDialog = false;
+    editingSerialHost = null;
     const { options, save } = detail;
     openTab("serial", options.portName, options);
 
     if (save) {
-      const config = await saveHost({
+      const result = await saveHost({
+        id: save.id,
         name: save.name,
         protocol: "serial",
         address: options.portName,
         baudRate: options.baudRate,
         auth: { type: "none" },
       });
-      hosts = config.hosts;
+      hosts = result.hosts;
+    }
+  }
+
+  function onEditHost(host: Host) {
+    if (host.protocol === "ssh") {
+      editingSshHost = host;
+      showSshDialog = true;
+    } else if (host.protocol === "serial") {
+      editingSerialHost = host;
+      showSerialDialog = true;
     }
   }
 
@@ -233,6 +275,12 @@
       {#if activeTab?.protocol === "ssh"}
         <button class="files-btn" class:active={showSftpPanel} on:click={toggleSftpPanel}>Files</button>
       {/if}
+      <button class="settings-btn" aria-label="Settings" title="Settings" on:click={openSettingsPanel}>
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="2.2" />
+          <path d="M8 2v1.6M8 12.4V14M14 8h-1.6M3.6 8H2M12.13 3.87l-1.13 1.13M4.99 11.01l-1.13 1.13M12.13 12.13l-1.13-1.13M4.99 4.99 3.87 3.87" />
+        </svg>
+      </button>
     </div>
   </div>
   <div class="body">
@@ -245,6 +293,7 @@
       on:newRdp={openRdpDialog}
       on:connect={(e) => connectToSavedHost(e.detail)}
       on:deleteHost={(e) => onDeleteHost(e.detail)}
+      on:editHost={(e) => onEditHost(e.detail)}
     />
     <SidebarResizer bind:width={sidebarWidth} />
     <div class="main">
@@ -281,10 +330,24 @@
   </div>
 
   {#if showSshDialog}
-    <SshConnectDialog on:connect={(e) => onSshConnect(e.detail)} on:cancel={() => (showSshDialog = false)} />
+    <SshConnectDialog
+      editHost={editingSshHost}
+      on:connect={(e) => onSshConnect(e.detail)}
+      on:cancel={() => {
+        showSshDialog = false;
+        editingSshHost = null;
+      }}
+    />
   {/if}
   {#if showSerialDialog}
-    <SerialConnectDialog on:connect={(e) => onSerialConnect(e.detail)} on:cancel={() => (showSerialDialog = false)} />
+    <SerialConnectDialog
+      editHost={editingSerialHost}
+      on:connect={(e) => onSerialConnect(e.detail)}
+      on:cancel={() => {
+        showSerialDialog = false;
+        editingSerialHost = null;
+      }}
+    />
   {/if}
   {#if showRdpDialog}
     <RdpConnectDialog on:connect={(e) => onRdpConnect(e.detail)} on:cancel={() => (showRdpDialog = false)} />
@@ -294,6 +357,14 @@
       options={activeSshOptions}
       title={activeTab.title}
       on:close={() => (showSftpPanel = false)}
+    />
+  {/if}
+  {#if showSettingsPanel && config}
+    <SettingsPanel
+      terminalFontFamily={config.settings.terminalFontFamily}
+      terminalFontSize={config.settings.terminalFontSize}
+      on:save={(e) => onSaveSettings(e.detail)}
+      on:cancel={() => (showSettingsPanel = false)}
     />
   {/if}
 </div>
@@ -379,6 +450,25 @@
     background: var(--accent);
     color: var(--accent-fg);
     font-weight: 600;
+  }
+  .settings-btn {
+    flex-shrink: 0;
+    align-self: center;
+    margin-right: var(--space-2);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--fg-tertiary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .settings-btn:hover {
+    background: var(--surface-3);
+    color: var(--fg-primary);
   }
   .session-area {
     flex: 1;
