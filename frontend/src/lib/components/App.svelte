@@ -57,17 +57,29 @@
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   $: activeSshOptions = activeTab?.protocol === "ssh" ? (activeTab.options as SshConnectOptions) : null;
 
-  // Keeps the same fallback chain tokens.css ships by default — replacing
-  // --font-mono with just the chosen family (no fallbacks) meant that if it
-  // isn't actually installed, the browser silently substitutes a
-  // proportional font while xterm.js still lays out cells at the fixed
-  // width it assumed for a monospace font, producing visibly gapped text.
+  // CSS generic family keywords (monospace, ui-monospace, ...) must stay
+  // unquoted — quoting one turns it into a request for an actual font
+  // literally named e.g. "monospace" instead of invoking the browser's
+  // built-in generic-family fallback, which is the whole point of using one.
+  const CSS_GENERIC_FONT_FAMILIES = new Set([
+    "monospace",
+    "ui-monospace",
+    "serif",
+    "sans-serif",
+    "system-ui",
+    "cursive",
+    "fantasy",
+  ]);
+
+  // Keeps a fallback chain after the chosen family — replacing --font-mono
+  // with just that one name (no fallbacks) meant that if it isn't actually
+  // installed, the browser silently substitutes a proportional font while
+  // xterm.js still lays out cells at the fixed width it assumed for a
+  // monospace font, producing visibly gapped text.
   function applyTerminalFontVars(settings: PortusConfig["settings"]) {
-    const family = settings.terminalFontFamily.replace(/"/g, '\\"');
-    document.documentElement.style.setProperty(
-      "--font-mono",
-      `"${family}", "Cascadia Code", "Cascadia Mono", ui-monospace, Consolas, monospace`,
-    );
+    const family = settings.terminalFontFamily.trim();
+    const primary = CSS_GENERIC_FONT_FAMILIES.has(family) ? family : `"${family.replace(/"/g, '\\"')}"`;
+    document.documentElement.style.setProperty("--font-mono", `${primary}, ui-monospace, Consolas, monospace`);
     document.documentElement.style.setProperty("--font-size-terminal", `${settings.terminalFontSize}px`);
   }
 

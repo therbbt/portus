@@ -122,8 +122,13 @@ impl Default for Settings {
     }
 }
 
+/// The CSS generic `monospace` keyword, not a specific font name — it
+/// always resolves to whatever real monospace font the OS actually has
+/// installed, so it can never hit the "requested font isn't installed,
+/// browser silently substitutes a proportional one" failure mode a named
+/// font (e.g. "JetBrains Mono") can.
 fn default_font_family() -> String {
-    "JetBrains Mono".to_string()
+    "monospace".to_string()
 }
 
 fn default_font_size() -> u16 {

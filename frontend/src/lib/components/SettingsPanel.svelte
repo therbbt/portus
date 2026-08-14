@@ -53,13 +53,16 @@
         <span class="section-title">Terminal</span>
         <label class="field">
           <span>Font family</span>
-          <input type="text" bind:value={fontFamily} placeholder="JetBrains Mono" />
+          <input type="text" bind:value={fontFamily} placeholder="monospace" />
         </label>
         <label class="field">
           <span>Font size</span>
           <input type="number" bind:value={fontSize} min="8" max="32" />
         </label>
-        <p class="hint">Applies to every open and future terminal tab.</p>
+        <p class="hint">
+          Applies to every new terminal tab opened afterward. "monospace" uses your system's default monospace
+          font — type a specific font name instead if you have one installed you'd rather use.
+        </p>
       </section>
     </div>
 
