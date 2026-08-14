@@ -8,10 +8,6 @@
   export let width = 260;
 
   const dispatch = createEventDispatcher<{
-    newShell: void;
-    newSsh: void;
-    newSerial: void;
-    newRdp: void;
     connect: Host;
     deleteHost: Host;
     editHost: Host;
@@ -255,18 +251,6 @@
   <div class="rail-footer">
     <button class="new-shell-btn" on:click={startCreateFolder}>
       + Folder
-    </button>
-    <button class="new-shell-btn" on:click={() => dispatch("newSsh")}>
-      + SSH connection
-    </button>
-    <button class="new-shell-btn" on:click={() => dispatch("newRdp")}>
-      + RDP connection
-    </button>
-    <button class="new-shell-btn" on:click={() => dispatch("newSerial")}>
-      + Serial connection
-    </button>
-    <button class="new-shell-btn" on:click={() => dispatch("newShell")}>
-      + Local shell
     </button>
   </div>
 </aside>
