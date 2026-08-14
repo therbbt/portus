@@ -275,12 +275,6 @@
       {/each}
     </ul>
   {/if}
-
-  <div class="rail-footer">
-    <button class="new-shell-btn" on:click={startCreateFolder}>
-      + Folder
-    </button>
-  </div>
 </aside>
 
 <style>
@@ -420,6 +414,17 @@
     color: var(--fg-primary);
     background: var(--surface-4);
   }
+  /* The chevron/name/action controls on a folder row are click targets,
+     not text inputs — the global accent focus ring (tokens.css's
+     *:focus-visible) reads as an unexpected flash of green on a click
+     here rather than useful keyboard-nav feedback. The rename input right
+     below keeps its own ring since typing feedback there IS useful. */
+  .folder-row .chevron-btn:focus-visible,
+  .folder-row .folder-name:focus-visible,
+  .folder-row .row-action:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
   .rename-input {
     flex: 1;
     min-width: 0;
@@ -432,33 +437,7 @@
     padding: 1px 4px;
   }
   .rename-input:focus-visible {
-    box-shadow: 0 0 0 2px var(--accent);
-  }
-  .rail-footer {
-    /* Matches FlashPad's sidebar Footer padding exactly (0.5rem 0.9rem) —
-       this is Portus's structural equivalent (bottom-of-sidebar bar), just
-       stacked instead of a single row since it holds several action
-       buttons instead of a search box. */
-    padding: 0.5rem 0.9rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .new-shell-btn {
-    width: 100%;
-    padding: 0.35rem 0.6rem;
-    background: var(--surface-2);
-    color: var(--fg-primary);
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: 0.75rem;
-    text-align: left;
-  }
-  .new-shell-btn:hover {
-    background: var(--surface-3);
-  }
-  .new-shell-btn:active {
-    background: var(--surface-4);
+    outline: none;
+    box-shadow: none;
   }
 </style>
