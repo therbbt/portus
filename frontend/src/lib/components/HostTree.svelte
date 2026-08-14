@@ -437,6 +437,7 @@
     padding: 1px 4px;
   }
   .rename-input:focus-visible {
-    box-shadow: 0 0 0 2px var(--accent);
+    outline: none;
+    box-shadow: none;
   }
 </style>
