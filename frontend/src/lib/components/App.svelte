@@ -14,6 +14,7 @@
   import SftpPanel from "./SftpPanel.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import NewConnectionMenu from "./NewConnectionMenu.svelte";
+  import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
   import type {
     Protocol,
     SessionState,
@@ -58,6 +59,7 @@
   let showRdpDialog = false;
   let showSftpPanel = false;
   let showSettingsPanel = false;
+  let contextMenu: { x: number; y: number; items: ContextMenuItem[] } | null = null;
   let hosts: Host[] = [];
   let groups: Group[] = [];
   let editingSshHost: Host | null = null;
@@ -352,6 +354,7 @@
       on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
       on:deleteFolder={(e) => onDeleteFolder(e.detail)}
       on:toggleFolder={(e) => onToggleFolder(e.detail)}
+      on:openContextMenu={(e) => (contextMenu = e.detail)}
     />
     <SidebarResizer bind:width={sidebarWidth} />
     <div class="main">
@@ -428,6 +431,9 @@
       on:save={(e) => onSaveSettings(e.detail)}
       on:cancel={() => (showSettingsPanel = false)}
     />
+  {/if}
+  {#if contextMenu}
+    <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => (contextMenu = null)} />
   {/if}
 </div>
 

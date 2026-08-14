@@ -79,7 +79,10 @@
     position: fixed;
     z-index: 1000;
     min-width: 170px;
-    background: var(--surface-1);
+    /* One tier lighter than the sidebar it usually pops up over
+       (--surface-1) so it reads as a distinct floating card rather than
+       blending into whatever's behind it. */
+    background: var(--surface-2);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -103,7 +106,7 @@
   }
 
   .item:hover:not(.disabled) {
-    background: var(--surface-2);
+    background: var(--surface-3);
   }
 
   .item.danger {
