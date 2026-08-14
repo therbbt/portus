@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use portus_core::session::{Session, SessionEvent, SessionState};
-use portus_shell::ShellSession;
+use portus_shell::{ShellConnectOptions, ShellSession};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
@@ -61,6 +61,40 @@ async fn shell_session_echoes_written_command() {
     assert!(saw_marker.is_ok(), "never saw echoed marker in pty output: {seen:?}");
 
     session.resize(120, 40).await.expect("resize failed");
+
+    session.shutdown().await.expect("shutdown failed");
+}
+
+/// Proves `ShellConnectOptions` actually reaches the spawned process instead
+/// of being silently ignored — a saved terminal preset's whole point is
+/// that its shell_command/working_dir take effect.
+#[tokio::test]
+async fn shell_session_honors_shell_command_and_working_dir_options() {
+    let tmp = std::env::temp_dir();
+    let options = ShellConnectOptions {
+        shell_command: Some("/bin/sh".to_string()),
+        working_dir: Some(tmp.to_string_lossy().to_string()),
+    };
+    let mut session = ShellSession::new(options);
+    let (tx, mut rx) = mpsc::unbounded_channel();
+
+    session.start(tx).await.expect("session failed to start");
+    wait_for_state(&mut rx, SessionState::Connected).await;
+
+    session.write(Bytes::from_static(b"pwd\n")).await.expect("write failed");
+
+    let mut seen = String::new();
+    let canonical_tmp = tmp.canonicalize().unwrap_or(tmp).to_string_lossy().to_string();
+    let saw_cwd = timeout(Duration::from_secs(5), async {
+        loop {
+            seen.push_str(&next_data(&mut rx).await);
+            if seen.contains(&canonical_tmp) {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(saw_cwd.is_ok(), "expected pwd output to contain {canonical_tmp:?}, got: {seen:?}");
 
     session.shutdown().await.expect("shutdown failed");
 }

@@ -45,6 +45,8 @@ fn deleting_a_folder_unparents_its_hosts_instead_of_deleting_them() {
         Some("testuser".to_string()),
         None,
         AuthInput::None,
+        None,
+        None,
     )
     .expect("save_host failed");
     let saved = config.hosts.iter().find(|h| h.id == host_id).expect("saved host missing");

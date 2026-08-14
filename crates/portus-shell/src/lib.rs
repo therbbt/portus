@@ -1,6 +1,7 @@
-//! Local shell `Session`, backed by `portable-pty`. This is the byte source
-//! for Milestone 2 — everything downstream (grid rendering, reflow,
-//! scrollback) is xterm.js's job, not this crate's.
+//! Local shell `Session`, backed by `portable-pty`. This crate is just the
+//! byte source — grid rendering/reflow is xterm.js's job, and scrollback
+//! persistence to disk (for saved shell presets) lives in
+//! `portus_core::scrollback`, not here.
 
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -8,11 +9,27 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use bytes::Bytes;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use portus_core::session::{Session, SessionError, SessionEvent, SessionState};
 
+/// Both fields are optional and empty by default — a bare `{}` (or the
+/// `None` sent for an ad-hoc "Local shell" tab) behaves exactly like the
+/// old hardcoded `default_shell()` + `$HOME` did.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellConnectOptions {
+    /// Overrides `$SHELL` (Unix) / `$COMSPEC` (Windows) when set.
+    #[serde(default)]
+    pub shell_command: Option<String>,
+    /// Overrides `$HOME` as the starting directory when set.
+    #[serde(default)]
+    pub working_dir: Option<String>,
+}
+
 pub struct ShellSession {
+    options: ShellConnectOptions,
     master: Option<Box<dyn MasterPty + Send>>,
     writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
     child: Option<Box<dyn Child + Send + Sync>>,
@@ -20,7 +37,13 @@ pub struct ShellSession {
 
 impl Default for ShellSession {
     fn default() -> Self {
-        Self { master: None, writer: None, child: None }
+        Self { options: ShellConnectOptions::default(), master: None, writer: None, child: None }
+    }
+}
+
+impl ShellSession {
+    pub fn new(options: ShellConnectOptions) -> Self {
+        Self { options, master: None, writer: None, child: None }
     }
 }
 
@@ -34,9 +57,15 @@ impl Session for ShellSession {
             .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
             .map_err(|e| SessionError::Protocol(format!("failed to open pty: {e}")))?;
 
-        let mut cmd = CommandBuilder::new(default_shell());
-        if let Ok(home) = std::env::var("HOME") {
-            cmd.cwd(home);
+        let shell = self.options.shell_command.clone().unwrap_or_else(default_shell);
+        let mut cmd = CommandBuilder::new(shell);
+        match &self.options.working_dir {
+            Some(dir) => cmd.cwd(dir),
+            None => {
+                if let Ok(home) = std::env::var("HOME") {
+                    cmd.cwd(home);
+                }
+            }
         }
 
         let child = pair

@@ -17,10 +17,15 @@ use crate::sftp_state::SftpState;
 pub fn session_open(
     protocol: String,
     options: Option<serde_json::Value>,
+    // Set when this tab is a saved host's session, not an ad-hoc one — the
+    // only thing it currently unlocks is scrollback persistence for saved
+    // shell presets (see portus_core::scrollback), since an ad-hoc tab has
+    // no stable identity to persist scrollback under anyway.
+    host_id: Option<Uuid>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    state.open(&protocol, options.unwrap_or(serde_json::Value::Null), app)
+    state.open(&protocol, options.unwrap_or(serde_json::Value::Null), host_id, app)
 }
 
 #[tauri::command]
@@ -103,6 +108,8 @@ pub fn save_host(
     username: Option<String>,
     baud_rate: Option<u32>,
     auth: AuthInput,
+    shell_command: Option<String>,
+    working_dir: Option<String>,
 ) -> Result<Config, String> {
     let id = id.unwrap_or_else(Uuid::new_v4);
     let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
@@ -129,6 +136,8 @@ pub fn save_host(
         username,
         baud_rate,
         auth: resolved_auth,
+        shell_command,
+        working_dir,
     };
 
     if let Some(existing) = config.hosts.iter_mut().find(|h| h.id == id) {
@@ -149,6 +158,7 @@ pub fn delete_host(host_id: Uuid) -> Result<Config, String> {
         if let Some(handle) = removed.auth.credential_handle() {
             let _ = portus_core::keychain::delete(handle);
         }
+        let _ = portus_core::scrollback::clear(host_id);
     }
     portus_core::config::save(&config).map_err(|e| e.to_string())?;
     Ok(config)
