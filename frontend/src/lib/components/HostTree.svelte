@@ -28,10 +28,6 @@
 </script>
 
 <aside class="rail" style="width: {width}px; min-width: {width}px">
-  <div class="rail-header">
-    <span class="rail-title">Hosts</span>
-  </div>
-
   {#if hosts.length === 0}
     <div class="empty-state">
       <RingMark size={40} />
@@ -86,25 +82,6 @@
     flex-direction: column;
     height: 100%;
   }
-  .rail-header {
-    /* Matches FlashPad's ActionToolbar exactly: height 30px, padding
-       0 0.5rem (not Portus's own wider --space-4 horizontal rhythm), and
-       the hairline bottom border — missed on the first pass, since
-       Portus's chrome is tonal-separation-first everywhere else. */
-    height: 30px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    padding: 0 0.5rem;
-    border-bottom: 1px solid var(--hairline);
-  }
-  .rail-title {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fg-tertiary);
-  }
   .empty-state {
     flex: 1;
     display: flex;
@@ -130,7 +107,9 @@
   .host-list {
     list-style: none;
     margin: 0;
-    padding: 0 var(--space-2);
+    /* Top padding for breathing room now that the rail has no header of its
+       own — that job moved to App.svelte's unified action bar. */
+    padding: var(--space-2) var(--space-2) 0;
     overflow-y: auto;
     flex: 1;
   }
