@@ -1,8 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import type { SessionState } from "../bridge";
 
-  export let tabs: Array<{ id: string; title: string; state: SessionState }> = [];
+  export let tabs: Array<{ id: string; title: string }> = [];
   export let activeId: string | null = null;
 
   const dispatch = createEventDispatcher<{
@@ -59,7 +58,7 @@
         on:keydown={(e) => e.key === "Enter" && dispatch("select", { id: tab.id })}
       >
         {#if tab.id === activeId}
-          <span class="status-dot" data-state={tab.state}></span>
+          <span class="status-dot"></span>
         {/if}
         {#if editingId === tab.id}
           <input
@@ -125,21 +124,14 @@
     background: var(--surface-2);
     color: var(--fg-primary);
   }
+  /* Only ever rendered on the active tab (see markup) — a plain "this is
+     the one you're looking at" marker, not a connection-state indicator. */
   .status-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--status-disconnected);
+    background: var(--accent);
     flex-shrink: 0;
-  }
-  .status-dot[data-state="connecting"] {
-    background: var(--status-connecting);
-  }
-  .status-dot[data-state="connected"] {
-    background: var(--status-connected);
-  }
-  .status-dot[data-state="disconnected"] {
-    background: var(--status-disconnected);
   }
   .tab-title-input {
     background: var(--surface-0);

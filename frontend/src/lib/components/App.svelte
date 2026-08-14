@@ -286,7 +286,7 @@
     </div>
     <div class="action-bar-main">
       <TabStrip
-        tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
+        tabs={tabs.map((t) => ({ id: t.id, title: t.title }))}
         activeId={activeTabId}
         on:select={(e) => selectTab(e.detail.id)}
         on:close={(e) => closeTab(e.detail.id)}
