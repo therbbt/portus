@@ -13,6 +13,7 @@
   import RdpView from "./RdpView.svelte";
   import SftpPanel from "./SftpPanel.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
+  import NewConnectionMenu from "./NewConnectionMenu.svelte";
   import type {
     Protocol,
     SessionState,
@@ -313,6 +314,12 @@
   <div class="action-bar">
     <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
       <span class="rail-title">Hosts</span>
+      <NewConnectionMenu
+        on:newSsh={openSshDialog}
+        on:newRdp={openRdpDialog}
+        on:newSerial={openSerialDialog}
+        on:newShell={newShellTab}
+      />
     </div>
     <div class="action-bar-main">
       <TabStrip
@@ -339,10 +346,6 @@
       {hosts}
       {groups}
       width={sidebarWidth}
-      on:newShell={newShellTab}
-      on:newSsh={openSshDialog}
-      on:newSerial={openSerialDialog}
-      on:newRdp={openRdpDialog}
       on:connect={(e) => connectToSavedHost(e.detail)}
       on:deleteHost={(e) => onDeleteHost(e.detail)}
       on:editHost={(e) => onEditHost(e.detail)}
@@ -460,7 +463,8 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    padding: 0 0.5rem;
+    justify-content: space-between;
+    padding: 0 0.4rem 0 0.5rem;
   }
   .rail-title {
     font-size: 11px;
