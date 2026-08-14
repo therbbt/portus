@@ -13,6 +13,7 @@
     newRdp: void;
     connect: Host;
     deleteHost: Host;
+    editHost: Host;
   }>();
 
   // "echo" is a debug-only session kind, never a real saved host's
@@ -42,6 +43,21 @@
             <span class="host-name">{host.name}</span>
             <span class="host-meta">{protocolLabel[host.protocol]} · {host.address}</span>
           </button>
+          {#if host.protocol === "ssh" || host.protocol === "serial"}
+            <span
+              class="host-edit"
+              role="button"
+              tabindex="0"
+              aria-label={`Edit ${host.name}`}
+              title={`Edit ${host.name}`}
+              on:click|stopPropagation={() => dispatch("editHost", host)}
+              on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("editHost", host)}
+            >
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 2l3 3-8 8-3.5.5.5-3.5z" />
+              </svg>
+            </span>
+          {/if}
           <span
             class="host-delete"
             role="button"
@@ -147,17 +163,22 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .host-edit,
   .host-delete {
     flex-shrink: 0;
-    padding: 0 0.5rem;
+    display: flex;
+    align-items: center;
+    padding: 0 0.4rem;
     color: var(--fg-tertiary);
     opacity: 0;
     border-radius: var(--radius-sm);
     line-height: 1;
   }
+  .host-row:hover .host-edit,
   .host-row:hover .host-delete {
     opacity: 1;
   }
+  .host-edit:hover,
   .host-delete:hover {
     color: var(--fg-primary);
     background: var(--surface-4);
