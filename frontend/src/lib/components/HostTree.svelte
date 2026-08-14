@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import RingMark from "./RingMark.svelte";
+  import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
   import type { Host, Group } from "../bridge";
 
   export let hosts: Host[] = [];
@@ -78,9 +79,37 @@
     node.focus();
     node.select();
   }
+
+  let contextMenu: { x: number; y: number; items: ContextMenuItem[] } | null = null;
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function openBackgroundMenu(event: MouseEvent) {
+    contextMenu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [{ label: "New folder", action: startCreateFolder }],
+    };
+  }
+
+  function openFolderMenu(event: MouseEvent, group: Group) {
+    contextMenu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        { label: "New folder", action: startCreateFolder },
+        { label: "", separator: true },
+        { label: "Rename", action: () => startRenameFolder(group) },
+        { label: "Delete", danger: true, action: () => dispatch("deleteFolder", group) },
+      ],
+    };
+  }
 </script>
 
-<aside class="rail" style="width: {width}px; min-width: {width}px">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<aside class="rail" style="width: {width}px; min-width: {width}px" on:contextmenu|preventDefault={openBackgroundMenu}>
   {#if hosts.length === 0 && groups.length === 0 && !creatingFolder}
     <div class="empty-state">
       <RingMark size={40} />
@@ -114,7 +143,8 @@
         </li>
       {/if}
       {#each rootGroups as group (group.id)}
-        <li class="folder-row">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <li class="folder-row" on:contextmenu|preventDefault|stopPropagation={(e) => openFolderMenu(e, group)}>
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span class="chevron-btn" on:click={() => dispatch("toggleFolder", group)}>
@@ -254,6 +284,10 @@
     </button>
   </div>
 </aside>
+
+{#if contextMenu}
+  <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={closeContextMenu} />
+{/if}
 
 <style>
   .rail {
