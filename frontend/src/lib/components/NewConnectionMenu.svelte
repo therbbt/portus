@@ -46,9 +46,13 @@
 
 <svelte:window on:mousedown={open ? handleOutsideClick : undefined} on:keydown={open ? handleKeydown : undefined} />
 
-<button class="new-btn" class:active={open} bind:this={buttonEl} on:click={toggle} aria-label="New connection" title="New connection">
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
-    <path d="M8 2v12M2 8h12" />
+<button class="toolbar-btn" class:active={open} bind:this={buttonEl} on:click={toggle} aria-label="New connection">
+  <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M8 3v10M3 8h10" />
+  </svg>
+  <span>New</span>
+  <svg class="caret" width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.5 3.5L5 6.5L7.5 3.5" />
   </svg>
 </button>
 
@@ -62,23 +66,32 @@
 {/if}
 
 <style>
-  .new-btn {
+  /* Matches FlashPad's ActionToolbar .toolbar-btn exactly (icon + label +
+     caret, 22px tall) — this dropdown trigger is the same kind of control
+     as FlashPad's "Notes"/"Insert" toolbar buttons, just wired to a
+     different menu. */
+  .toolbar-btn {
     flex-shrink: 0;
-    width: 22px;
-    height: 22px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    background: transparent;
-    color: var(--fg-tertiary);
+    gap: 0.25rem;
+    height: 22px;
     border: none;
     border-radius: var(--radius-sm);
+    padding: 0 0.4rem;
+    background: transparent;
+    color: var(--fg-tertiary);
+    font-size: 0.8rem;
+    line-height: 1;
     cursor: pointer;
   }
-  .new-btn:hover,
-  .new-btn.active {
+  .toolbar-btn:hover,
+  .toolbar-btn.active {
     background: var(--surface-3);
     color: var(--fg-primary);
+  }
+  .toolbar-btn .caret {
+    opacity: 0.7;
   }
 
   .menu {
@@ -86,6 +99,7 @@
     z-index: 1000;
     min-width: 170px;
     background: var(--surface-2);
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     padding: 0.25rem;
@@ -100,8 +114,8 @@
     background: transparent;
     color: var(--fg-primary);
     text-align: left;
-    padding: 0.4rem 0.55rem;
-    font-size: 0.78rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8rem;
     border-radius: var(--radius-sm);
     cursor: pointer;
   }
