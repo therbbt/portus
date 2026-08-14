@@ -104,8 +104,14 @@ body {
   height: 100%;
 }
 
-body.resizing-sidebar {
+body.resizing-sidebar,
+body.resizing-pane-col {
   cursor: col-resize;
+  user-select: none;
+}
+
+body.resizing-pane-row {
+  cursor: row-resize;
   user-select: none;
 }
 
