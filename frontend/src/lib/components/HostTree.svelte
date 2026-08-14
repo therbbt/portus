@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import RingMark from "./RingMark.svelte";
-  import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
+  import type { ContextMenuItem } from "./ContextMenu.svelte";
   import type { Host, Group } from "../bridge";
 
   export let hosts: Host[] = [];
@@ -16,6 +16,10 @@
     createFolder: { name: string };
     renameFolder: { id: string; name: string };
     deleteFolder: Group;
+    // The menu itself renders from App.svelte, same as every other overlay
+    // in this app (connect dialogs, Settings) — a fixed-position popup
+    // shouldn't be nested inside a flex-item component's own render tree.
+    openContextMenu: { x: number; y: number; items: ContextMenuItem[] };
   }>();
 
   // "echo" is a debug-only session kind, never a real saved host's
@@ -80,22 +84,16 @@
     node.select();
   }
 
-  let contextMenu: { x: number; y: number; items: ContextMenuItem[] } | null = null;
-
-  function closeContextMenu() {
-    contextMenu = null;
-  }
-
   function openBackgroundMenu(event: MouseEvent) {
-    contextMenu = {
+    dispatch("openContextMenu", {
       x: event.clientX,
       y: event.clientY,
       items: [{ label: "New folder", action: startCreateFolder }],
-    };
+    });
   }
 
   function openFolderMenu(event: MouseEvent, group: Group) {
-    contextMenu = {
+    dispatch("openContextMenu", {
       x: event.clientX,
       y: event.clientY,
       items: [
@@ -104,7 +102,7 @@
         { label: "Rename", action: () => startRenameFolder(group) },
         { label: "Delete", danger: true, action: () => dispatch("deleteFolder", group) },
       ],
-    };
+    });
   }
 </script>
 
@@ -284,10 +282,6 @@
     </button>
   </div>
 </aside>
-
-{#if contextMenu}
-  <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={closeContextMenu} />
-{/if}
 
 <style>
   .rail {
