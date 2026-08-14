@@ -87,7 +87,12 @@
     height: 100%;
   }
   .rail-header {
-    padding: var(--space-4) var(--space-4) var(--space-2);
+    /* Matches FlashPad's ActionToolbar height (30px) exactly. */
+    height: 30px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-4);
   }
   .rail-title {
     font-size: 11px;
