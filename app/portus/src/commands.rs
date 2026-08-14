@@ -3,7 +3,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
-use portus_core::config::{AuthMethod, Config, Host};
+use portus_core::config::{AuthMethod, Config, Group, Host};
 use portus_core::session::Protocol;
 use portus_rdp::{RdpConnectOptions, RdpEvent};
 use portus_sftp::DirEntry;
@@ -165,6 +165,56 @@ pub fn resolve_host_secret(host_id: Uuid) -> Result<Option<String>, String> {
         Some(handle) => portus_core::keychain::retrieve(handle).map(Some).map_err(|e| e.to_string()),
         None => Ok(None),
     }
+}
+
+// --- Groups --------------------------------------------------------------
+// Folders in the sidebar. A host's group_id (or a subgroup's parent_id)
+// pointing at a deleted group is never left dangling — delete_group always
+// un-parents whatever it contained rather than cascading.
+
+/// Creates or renames/reparents a saved folder.
+#[tauri::command]
+pub fn save_group(id: Option<Uuid>, name: String, parent_id: Option<Uuid>) -> Result<Config, String> {
+    let id = id.unwrap_or_else(Uuid::new_v4);
+    let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
+
+    if let Some(existing) = config.groups.iter_mut().find(|g| g.id == id) {
+        existing.name = name;
+        existing.parent_id = parent_id;
+    } else {
+        config.groups.push(Group { id, name, parent_id, collapsed: false });
+    }
+
+    portus_core::config::save(&config).map_err(|e| e.to_string())?;
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn delete_group(group_id: Uuid) -> Result<Config, String> {
+    let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
+    config.groups.retain(|g| g.id != group_id);
+    for host in config.hosts.iter_mut() {
+        if host.group_id == Some(group_id) {
+            host.group_id = None;
+        }
+    }
+    for group in config.groups.iter_mut() {
+        if group.parent_id == Some(group_id) {
+            group.parent_id = None;
+        }
+    }
+    portus_core::config::save(&config).map_err(|e| e.to_string())?;
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn set_group_collapsed(group_id: Uuid, collapsed: bool) -> Result<Config, String> {
+    let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
+    if let Some(group) = config.groups.iter_mut().find(|g| g.id == group_id) {
+        group.collapsed = collapsed;
+    }
+    portus_core::config::save(&config).map_err(|e| e.to_string())?;
+    Ok(config)
 }
 
 // --- SFTP --------------------------------------------------------------

@@ -41,16 +41,6 @@ export interface RdpConnectOptions {
   domain?: string | null;
 }
 
-/** Emitted alongside a connect dialog's `connect` event when the user
- * checked "save this connection" — the display name plus everything else
- * needed to build the saved `Host` is already in the connect options.
- * `id` is set when editing an existing saved host, so the save overwrites
- * it in place instead of creating a new entry. */
-export interface SaveRequest {
-  id?: string;
-  name: string;
-}
-
 export type SessionOptions = SshConnectOptions | SerialConnectOptions | RdpConnectOptions | undefined;
 
 export async function openSession(protocol: Protocol, options?: SessionOptions): Promise<string> {
@@ -135,6 +125,26 @@ export async function saveHost(input: SaveHostInput): Promise<PortusConfig> {
 
 export async function deleteHost(hostId: string): Promise<PortusConfig> {
   return invoke<PortusConfig>("delete_host", { hostId });
+}
+
+// --- Groups (sidebar folders) ----------------------------------------------
+
+export interface SaveGroupInput {
+  id?: string | null;
+  name: string;
+  parentId?: string | null;
+}
+
+export async function saveGroup(input: SaveGroupInput): Promise<PortusConfig> {
+  return invoke<PortusConfig>("save_group", { ...input });
+}
+
+export async function deleteGroup(groupId: string): Promise<PortusConfig> {
+  return invoke<PortusConfig>("delete_group", { groupId });
+}
+
+export async function setGroupCollapsed(groupId: string, collapsed: boolean): Promise<PortusConfig> {
+  return invoke<PortusConfig>("set_group_collapsed", { groupId, collapsed });
 }
 
 /** Pulls a saved host's password/passphrase back out of the keychain. `null`
