@@ -92,10 +92,10 @@
 
 <style>
   .tabstrip {
-    height: var(--tabstrip-height);
+    /* No height/background of its own — it now lives inside App.svelte's
+       unified .action-bar, which is the single source of truth for both. */
     display: flex;
     align-items: stretch;
-    background: var(--surface-1);
   }
   .tabs {
     display: flex;
