@@ -87,12 +87,13 @@
     height: 100%;
   }
   .rail-header {
-    /* Matches FlashPad's ActionToolbar height (30px) exactly. */
+    /* Matches FlashPad's ActionToolbar exactly: height 30px, padding
+       0 0.5rem (not Portus's own wider --space-4 horizontal rhythm). */
     height: 30px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    padding: 0 var(--space-4);
+    padding: 0 0.5rem;
   }
   .rail-title {
     font-size: 11px;
