@@ -62,7 +62,9 @@
 
   /* Chrome */
   --titlebar-height: 28px;
-  --tabstrip-height: 36px;
+  /* Also the height of App.svelte's unified action bar (tab strip + the
+     sidebar label zone) — matches FlashPad's ActionToolbar (30px). */
+  --tabstrip-height: 30px;
 
   /* The Tauri window is fully transparent (see tauri.conf.json) and 1px
      larger on every side than the visible app-shell, so the shell's own

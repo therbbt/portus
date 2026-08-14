@@ -217,6 +217,24 @@
 <div class="app-shell">
   <ResizeHandles />
   <TitleBar />
+  <div class="action-bar">
+    <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
+      <span class="rail-title">Hosts</span>
+    </div>
+    <div class="action-bar-main">
+      <TabStrip
+        tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
+        activeId={activeTabId}
+        on:select={(e) => selectTab(e.detail.id)}
+        on:close={(e) => closeTab(e.detail.id)}
+        on:rename={(e) => onRename(e.detail.id, e.detail.title)}
+        on:new={newShellTab}
+      />
+      {#if activeTab?.protocol === "ssh"}
+        <button class="files-btn" class:active={showSftpPanel} on:click={toggleSftpPanel}>Files</button>
+      {/if}
+    </div>
+  </div>
   <div class="body">
     <HostTree
       {hosts}
@@ -230,19 +248,6 @@
     />
     <SidebarResizer bind:width={sidebarWidth} />
     <div class="main">
-      <div class="tabstrip-row">
-        <TabStrip
-          tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: t.state }))}
-          activeId={activeTabId}
-          on:select={(e) => selectTab(e.detail.id)}
-          on:close={(e) => closeTab(e.detail.id)}
-          on:rename={(e) => onRename(e.detail.id, e.detail.title)}
-          on:new={newShellTab}
-        />
-        {#if activeTab?.protocol === "ssh"}
-          <button class="files-btn" class:active={showSftpPanel} on:click={toggleSftpPanel}>Files</button>
-        {/if}
-      </div>
       <div class="session-area">
         {#each tabs as tab (tab.id)}
           {#if tab.protocol === "rdp"}
@@ -307,6 +312,42 @@
     overflow: hidden;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   }
+  /* One continuous bar spanning the full window, like FlashPad's
+     ActionToolbar — the sidebar label and the tab strip used to be two
+     separate, visually disconnected bars sitting side by side; now they're
+     zones within a single row, split at the same width as the sidebar
+     below so the seam lines up with the resizer. */
+  .action-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    height: var(--tabstrip-height);
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .action-bar-sidebar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+  }
+  .rail-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-tertiary);
+  }
+  .action-bar-main {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+  }
+  .action-bar-main :global(.tabstrip) {
+    flex: 1;
+    min-width: 0;
+  }
   .body {
     flex: 1;
     display: flex;
@@ -316,15 +357,6 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-width: 0;
-  }
-  .tabstrip-row {
-    display: flex;
-    align-items: stretch;
-    background: var(--surface-1);
-  }
-  .tabstrip-row :global(.tabstrip) {
-    flex: 1;
     min-width: 0;
   }
   .files-btn {
