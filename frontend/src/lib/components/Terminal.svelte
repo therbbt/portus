@@ -15,6 +15,7 @@
     type SessionState,
     type SessionOptions,
   } from "../bridge";
+  import { terminalAppearanceVersion } from "../terminalAppearance";
 
   export let protocol: Protocol = "shell";
   export let options: SessionOptions = undefined;
@@ -60,31 +61,15 @@
     });
   }
 
-  function handleEvent(event: SessionEvent) {
-    switch (event.type) {
-      case "data":
-        term.write(new Uint8Array(event.data));
-        break;
-      case "state_changed":
-        dispatch("state", event.state);
-        break;
-      case "title_changed":
-        dispatch("title", { title: event.title });
-        break;
-      case "closed":
-        dispatch("closed", { reason: event.reason });
-        break;
-      case "error":
-        term.write(`\r\n\x1b[31m[portus] ${event.message}\x1b[0m\r\n`);
-        break;
-    }
-  }
-
-  onMount(async () => {
+  // Single source of truth for both the terminal's initial construction and
+  // any later live refresh (see the $: block below) — reads the same
+  // --font-mono/--font-size-terminal/--ansi-* custom properties either way,
+  // so a Settings change reaches this terminal the moment it's saved
+  // instead of only affecting tabs opened afterward.
+  function readAppearance() {
     const rootStyle = getComputedStyle(document.documentElement);
     const cssVar = (name: string) => rootStyle.getPropertyValue(name).trim();
-
-    term = new Terminal({
+    return {
       fontFamily: cssVar("--font-mono"),
       fontSize: parseInt(cssVar("--font-size-terminal")) || 14,
       theme: {
@@ -112,6 +97,46 @@
         brightCyan: cssVar("--ansi-bright-cyan"),
         brightWhite: cssVar("--ansi-bright-white"),
       },
+    };
+  }
+
+  function applyLiveAppearance() {
+    if (!term) return;
+    const appearance = readAppearance();
+    term.options.fontFamily = appearance.fontFamily;
+    term.options.fontSize = appearance.fontSize;
+    term.options.theme = appearance.theme;
+    // A font-size change moves cell metrics, so the grid needs re-fitting
+    // the same way a container resize does.
+    fitAddon?.fit();
+  }
+
+  function handleEvent(event: SessionEvent) {
+    switch (event.type) {
+      case "data":
+        term.write(new Uint8Array(event.data));
+        break;
+      case "state_changed":
+        dispatch("state", event.state);
+        break;
+      case "title_changed":
+        dispatch("title", { title: event.title });
+        break;
+      case "closed":
+        dispatch("closed", { reason: event.reason });
+        break;
+      case "error":
+        term.write(`\r\n\x1b[31m[portus] ${event.message}\x1b[0m\r\n`);
+        break;
+    }
+  }
+
+  onMount(async () => {
+    const appearance = readAppearance();
+    term = new Terminal({
+      fontFamily: appearance.fontFamily,
+      fontSize: appearance.fontSize,
+      theme: appearance.theme,
       cursorBlink: true,
       scrollback: 5000,
       allowProposedApi: true,
@@ -156,6 +181,13 @@
   $: if (active && term && fitAddon) {
     // Becoming the visible tab can reveal a stale size (it was 0x0 while hidden).
     requestAnimationFrame(applyFit);
+  }
+
+  // Fires once redundantly right after onMount creates `term` (harmless —
+  // just re-applies what construction already used), then again on every
+  // real settings change afterward.
+  $: if (term && $terminalAppearanceVersion >= 0) {
+    applyLiveAppearance();
   }
 </script>
 
