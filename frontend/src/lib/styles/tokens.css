@@ -43,6 +43,30 @@
   --status-disconnected: #726f66;
   --status-error: #ef4444;
 
+  /* Terminal ANSI 16-color palette — these are xterm.js's OWN built-in
+     defaults (the classic Tango palette), copied verbatim so the terminal
+     looks identical to today unless a user overrides one via Settings
+     (App.svelte's applyTerminalColorVars sets only the specific properties
+     a per-machine override actually touches, leaving the rest at these
+     defaults). Terminal.svelte reads all sixteen via getComputedStyle when
+     building xterm.js's theme. */
+  --ansi-black: #2e3436;
+  --ansi-red: #cc0000;
+  --ansi-green: #4e9a06;
+  --ansi-yellow: #c4a000;
+  --ansi-blue: #3465a4;
+  --ansi-magenta: #75507b;
+  --ansi-cyan: #06989a;
+  --ansi-white: #d3d7cf;
+  --ansi-bright-black: #555753;
+  --ansi-bright-red: #ef2929;
+  --ansi-bright-green: #8ae234;
+  --ansi-bright-yellow: #fce94f;
+  --ansi-bright-blue: #729fcf;
+  --ansi-bright-magenta: #ad7fa8;
+  --ansi-bright-cyan: #34e2e2;
+  --ansi-bright-white: #eeeeec;
+
   /* Typography — Inter isn't bundled, same as FlashPad; it's used when
      present on the system and falls back to the platform sans otherwise. */
   --font-ui: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

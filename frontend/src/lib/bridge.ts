@@ -98,11 +98,34 @@ export interface Group {
   collapsed: boolean;
 }
 
+/** Per-machine ANSI palette overrides — every field optional, `undefined`
+ * meaning "use xterm.js's own default for that color" (see tokens.css's
+ * --ansi-* custom properties, which hold those defaults verbatim). Hex
+ * strings like "#8ae234", produced by <input type="color">. */
+export interface TerminalColors {
+  black?: string | null;
+  red?: string | null;
+  green?: string | null;
+  yellow?: string | null;
+  blue?: string | null;
+  magenta?: string | null;
+  cyan?: string | null;
+  white?: string | null;
+  brightBlack?: string | null;
+  brightRed?: string | null;
+  brightGreen?: string | null;
+  brightYellow?: string | null;
+  brightBlue?: string | null;
+  brightMagenta?: string | null;
+  brightCyan?: string | null;
+  brightWhite?: string | null;
+}
+
 export interface PortusConfig {
   schemaVersion: number;
   groups: Group[];
   hosts: Host[];
-  settings: { terminalFontFamily: string; terminalFontSize: number };
+  settings: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors };
 }
 
 export async function getConfig(): Promise<PortusConfig> {

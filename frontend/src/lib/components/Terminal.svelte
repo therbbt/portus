@@ -81,14 +81,36 @@
   }
 
   onMount(async () => {
+    const rootStyle = getComputedStyle(document.documentElement);
+    const cssVar = (name: string) => rootStyle.getPropertyValue(name).trim();
+
     term = new Terminal({
-      fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim(),
-      fontSize: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--font-size-terminal")) || 14,
+      fontFamily: cssVar("--font-mono"),
+      fontSize: parseInt(cssVar("--font-size-terminal")) || 14,
       theme: {
-        background: getComputedStyle(document.documentElement).getPropertyValue("--surface-0").trim(),
-        foreground: getComputedStyle(document.documentElement).getPropertyValue("--fg-primary").trim(),
-        cursor: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
-        selectionBackground: getComputedStyle(document.documentElement).getPropertyValue("--accent-dim").trim(),
+        background: cssVar("--surface-0"),
+        foreground: cssVar("--fg-primary"),
+        cursor: cssVar("--accent"),
+        selectionBackground: cssVar("--accent-dim"),
+        // Per-machine overrides (Settings) land on these custom properties
+        // via App.svelte's applyTerminalColorVars — tokens.css's --ansi-*
+        // defaults (xterm.js's own built-in palette) otherwise.
+        black: cssVar("--ansi-black"),
+        red: cssVar("--ansi-red"),
+        green: cssVar("--ansi-green"),
+        yellow: cssVar("--ansi-yellow"),
+        blue: cssVar("--ansi-blue"),
+        magenta: cssVar("--ansi-magenta"),
+        cyan: cssVar("--ansi-cyan"),
+        white: cssVar("--ansi-white"),
+        brightBlack: cssVar("--ansi-bright-black"),
+        brightRed: cssVar("--ansi-bright-red"),
+        brightGreen: cssVar("--ansi-bright-green"),
+        brightYellow: cssVar("--ansi-bright-yellow"),
+        brightBlue: cssVar("--ansi-bright-blue"),
+        brightMagenta: cssVar("--ansi-bright-magenta"),
+        brightCyan: cssVar("--ansi-bright-cyan"),
+        brightWhite: cssVar("--ansi-bright-white"),
       },
       cursorBlink: true,
       scrollback: 5000,
