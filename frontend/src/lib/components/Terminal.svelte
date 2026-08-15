@@ -15,6 +15,7 @@
     type SessionState,
     type SessionOptions,
   } from "../bridge";
+  import { terminalAppearanceVersion } from "../terminalAppearance";
 
   export let protocol: Protocol = "shell";
   export let options: SessionOptions = undefined;
@@ -60,6 +61,56 @@
     });
   }
 
+  // Single source of truth for both the terminal's initial construction and
+  // any later live refresh (see the $: block below) — reads the same
+  // --font-mono/--font-size-terminal/--ansi-* custom properties either way,
+  // so a Settings change reaches this terminal the moment it's saved
+  // instead of only affecting tabs opened afterward.
+  function readAppearance() {
+    const rootStyle = getComputedStyle(document.documentElement);
+    const cssVar = (name: string) => rootStyle.getPropertyValue(name).trim();
+    return {
+      fontFamily: cssVar("--font-mono"),
+      fontSize: parseInt(cssVar("--font-size-terminal")) || 14,
+      theme: {
+        background: cssVar("--surface-0"),
+        foreground: cssVar("--fg-primary"),
+        cursor: cssVar("--accent"),
+        selectionBackground: cssVar("--accent-dim"),
+        // Per-machine overrides (Settings) land on these custom properties
+        // via App.svelte's applyTerminalColorVars — tokens.css's --ansi-*
+        // defaults (xterm.js's own built-in palette) otherwise.
+        black: cssVar("--ansi-black"),
+        red: cssVar("--ansi-red"),
+        green: cssVar("--ansi-green"),
+        yellow: cssVar("--ansi-yellow"),
+        blue: cssVar("--ansi-blue"),
+        magenta: cssVar("--ansi-magenta"),
+        cyan: cssVar("--ansi-cyan"),
+        white: cssVar("--ansi-white"),
+        brightBlack: cssVar("--ansi-bright-black"),
+        brightRed: cssVar("--ansi-bright-red"),
+        brightGreen: cssVar("--ansi-bright-green"),
+        brightYellow: cssVar("--ansi-bright-yellow"),
+        brightBlue: cssVar("--ansi-bright-blue"),
+        brightMagenta: cssVar("--ansi-bright-magenta"),
+        brightCyan: cssVar("--ansi-bright-cyan"),
+        brightWhite: cssVar("--ansi-bright-white"),
+      },
+    };
+  }
+
+  function applyLiveAppearance() {
+    if (!term) return;
+    const appearance = readAppearance();
+    term.options.fontFamily = appearance.fontFamily;
+    term.options.fontSize = appearance.fontSize;
+    term.options.theme = appearance.theme;
+    // A font-size change moves cell metrics, so the grid needs re-fitting
+    // the same way a container resize does.
+    fitAddon?.fit();
+  }
+
   function handleEvent(event: SessionEvent) {
     switch (event.type) {
       case "data":
@@ -81,15 +132,11 @@
   }
 
   onMount(async () => {
+    const appearance = readAppearance();
     term = new Terminal({
-      fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim(),
-      fontSize: parseInt(getComputedStyle(document.documentElement).getPropertyValue("--font-size-terminal")) || 14,
-      theme: {
-        background: getComputedStyle(document.documentElement).getPropertyValue("--surface-0").trim(),
-        foreground: getComputedStyle(document.documentElement).getPropertyValue("--fg-primary").trim(),
-        cursor: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
-        selectionBackground: getComputedStyle(document.documentElement).getPropertyValue("--accent-dim").trim(),
-      },
+      fontFamily: appearance.fontFamily,
+      fontSize: appearance.fontSize,
+      theme: appearance.theme,
       cursorBlink: true,
       scrollback: 5000,
       allowProposedApi: true,
@@ -134,6 +181,13 @@
   $: if (active && term && fitAddon) {
     // Becoming the visible tab can reveal a stale size (it was 0x0 while hidden).
     requestAnimationFrame(applyFit);
+  }
+
+  // Fires once redundantly right after onMount creates `term` (harmless —
+  // just re-applies what construction already used), then again on every
+  // real settings change afterward.
+  $: if (term && $terminalAppearanceVersion >= 0) {
+    applyLiveAppearance();
   }
 </script>
 
