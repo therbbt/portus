@@ -133,8 +133,8 @@
           <input type="number" bind:value={fontSize} min="8" max="32" />
         </label>
         <p class="hint">
-          Applies to every new terminal tab opened afterward. "monospace" uses your system's default monospace
-          font — type a specific font name instead if you have one installed you'd rather use.
+          Applies immediately to every open terminal, not just new ones. "monospace" uses your system's default
+          monospace font — type a specific font name instead if you have one installed you'd rather use.
         </p>
       </section>
 

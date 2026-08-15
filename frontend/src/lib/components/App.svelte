@@ -40,6 +40,7 @@
     setGroupCollapsed,
   } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
+  import { terminalAppearanceVersion } from "../terminalAppearance";
   import {
     collectPaneIds,
     insertSplit,
@@ -179,6 +180,9 @@
     config = next;
     applyTerminalFontVars(next.settings);
     applyTerminalColorVars(next.settings.terminalColors);
+    // Pushes the new font/colors into every already-open terminal too, not
+    // just ones opened from here on.
+    terminalAppearanceVersion.update((n) => n + 1);
   }
 
   function createPane(protocol: Protocol, title: string, options: SessionOptions, hostId?: string, shellNumber?: number): string {
