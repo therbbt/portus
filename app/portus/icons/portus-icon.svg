@@ -1,0 +1,17 @@
+<!--
+  App icon source. A scaled-up copy of frontend/src/lib/components/RingMark.svelte's
+  mark (broken ring + harbor-mouth beacon), sized bold and edge-to-edge on
+  a rounded-square background — matching Vut's icon proportions rather than
+  FlashPad's smaller, more-padded rendering (both siblings in the same
+  design family; see tokens.css for the palette this pulls from).
+
+  Regenerating the PNG/ICO/ICNS set from this file:
+    magick -background none -density 384 portus-icon.svg -resize 1024x1024 icon-1024.png
+  then derive every other size/format in this directory from that master
+  (Pillow's Image.save handles .ico/.icns directly given a sizes= list).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect x="0" y="0" width="512" height="512" rx="96" ry="96" fill="#16161a"/>
+  <path d="M 256 96.5 A 187 187 0 1 1 89.9 377" stroke="#4dd0c8" stroke-width="44" stroke-linecap="round" fill="none"/>
+  <rect x="228.5" y="41.5" width="55" height="110" rx="16.5" fill="#4dd0c8"/>
+</svg>
