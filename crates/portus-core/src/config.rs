@@ -120,6 +120,8 @@ pub struct Settings {
     pub terminal_font_family: String,
     #[serde(default = "default_font_size")]
     pub terminal_font_size: u16,
+    #[serde(default)]
+    pub terminal_colors: TerminalColors,
 }
 
 impl Default for Settings {
@@ -127,8 +129,53 @@ impl Default for Settings {
         Self {
             terminal_font_family: default_font_family(),
             terminal_font_size: default_font_size(),
+            terminal_colors: TerminalColors::default(),
         }
     }
+}
+
+/// Per-machine overrides for the terminal's 16-color ANSI palette — never
+/// synced anywhere, just read out of this machine's own config.json. Every
+/// field is `None` by default, meaning "use xterm.js's own default for that
+/// color" (the frontend only sets the corresponding CSS custom property
+/// when a field here is actually `Some`, so an untouched config changes
+/// nothing about how the terminal looks). Hex strings (e.g. "#8ae234"),
+/// validated frontend-side by `<input type="color">`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalColors {
+    #[serde(default)]
+    pub black: Option<String>,
+    #[serde(default)]
+    pub red: Option<String>,
+    #[serde(default)]
+    pub green: Option<String>,
+    #[serde(default)]
+    pub yellow: Option<String>,
+    #[serde(default)]
+    pub blue: Option<String>,
+    #[serde(default)]
+    pub magenta: Option<String>,
+    #[serde(default)]
+    pub cyan: Option<String>,
+    #[serde(default)]
+    pub white: Option<String>,
+    #[serde(default)]
+    pub bright_black: Option<String>,
+    #[serde(default)]
+    pub bright_red: Option<String>,
+    #[serde(default)]
+    pub bright_green: Option<String>,
+    #[serde(default)]
+    pub bright_yellow: Option<String>,
+    #[serde(default)]
+    pub bright_blue: Option<String>,
+    #[serde(default)]
+    pub bright_magenta: Option<String>,
+    #[serde(default)]
+    pub bright_cyan: Option<String>,
+    #[serde(default)]
+    pub bright_white: Option<String>,
 }
 
 /// The CSS generic `monospace` keyword, not a specific font name — it

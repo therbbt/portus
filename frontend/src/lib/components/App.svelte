@@ -27,6 +27,7 @@
     Host,
     Group,
     PortusConfig,
+    TerminalColors,
   } from "../bridge";
   import {
     getConfig,
@@ -39,6 +40,7 @@
     setGroupCollapsed,
   } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
+  import { terminalAppearanceVersion } from "../terminalAppearance";
   import {
     collectPaneIds,
     insertSplit,
@@ -109,12 +111,49 @@
     document.documentElement.style.setProperty("--font-size-terminal", `${settings.terminalFontSize}px`);
   }
 
+  // Maps each TerminalColors field to the CSS custom property it overrides.
+  // Only the properties an actual per-machine override exists for get
+  // touched — everything else stays at tokens.css's xterm.js-matching
+  // defaults, and removeProperty() (rather than leaving a stale inline
+  // value) is what makes "reset to default" in Settings actually work.
+  const ANSI_COLOR_CSS_VARS: Record<keyof TerminalColors, string> = {
+    black: "--ansi-black",
+    red: "--ansi-red",
+    green: "--ansi-green",
+    yellow: "--ansi-yellow",
+    blue: "--ansi-blue",
+    magenta: "--ansi-magenta",
+    cyan: "--ansi-cyan",
+    white: "--ansi-white",
+    brightBlack: "--ansi-bright-black",
+    brightRed: "--ansi-bright-red",
+    brightGreen: "--ansi-bright-green",
+    brightYellow: "--ansi-bright-yellow",
+    brightBlue: "--ansi-bright-blue",
+    brightMagenta: "--ansi-bright-magenta",
+    brightCyan: "--ansi-bright-cyan",
+    brightWhite: "--ansi-bright-white",
+  };
+
+  function applyTerminalColorVars(colors: TerminalColors) {
+    for (const key of Object.keys(ANSI_COLOR_CSS_VARS) as Array<keyof TerminalColors>) {
+      const cssVar = ANSI_COLOR_CSS_VARS[key];
+      const value = colors[key];
+      if (value) {
+        document.documentElement.style.setProperty(cssVar, value);
+      } else {
+        document.documentElement.style.removeProperty(cssVar);
+      }
+    }
+  }
+
   onMount(async () => {
     try {
       config = await getConfig();
       hosts = config.hosts;
       groups = config.groups;
       applyTerminalFontVars(config.settings);
+      applyTerminalColorVars(config.settings.terminalColors);
     } catch {
       // No persisted config yet (first launch) — the rail just stays empty.
     }
@@ -128,18 +167,22 @@
     showSettingsPanel = true;
   }
 
-  async function onSaveSettings(detail: { terminalFontFamily: string; terminalFontSize: number }) {
+  async function onSaveSettings(detail: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors }) {
     showSettingsPanel = false;
     const next: PortusConfig = config ?? {
       schemaVersion: 2,
       groups: [],
       hosts,
-      settings: { terminalFontFamily: "JetBrains Mono", terminalFontSize: 14 },
+      settings: { terminalFontFamily: "JetBrains Mono", terminalFontSize: 14, terminalColors: {} },
     };
     next.settings = detail;
     await saveConfig(next);
     config = next;
     applyTerminalFontVars(next.settings);
+    applyTerminalColorVars(next.settings.terminalColors);
+    // Pushes the new font/colors into every already-open terminal too, not
+    // just ones opened from here on.
+    terminalAppearanceVersion.update((n) => n + 1);
   }
 
   function createPane(protocol: Protocol, title: string, options: SessionOptions, hostId?: string, shellNumber?: number): string {
@@ -576,6 +619,7 @@
     <SettingsPanel
       terminalFontFamily={config.settings.terminalFontFamily}
       terminalFontSize={config.settings.terminalFontSize}
+      terminalColors={config.settings.terminalColors}
       on:save={(e) => onSaveSettings(e.detail)}
       on:cancel={() => (showSettingsPanel = false)}
     />

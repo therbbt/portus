@@ -1,23 +1,96 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
+  import type { TerminalColors } from "../bridge";
 
   export let terminalFontFamily: string;
   export let terminalFontSize: number;
+  export let terminalColors: TerminalColors;
 
   const dispatch = createEventDispatcher<{
-    save: { terminalFontFamily: string; terminalFontSize: number };
+    save: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors };
     cancel: void;
   }>();
 
+  // xterm.js's own built-in ANSI palette (the classic Tango colors) —
+  // must match tokens.css's --ansi-* defaults exactly. Used both to
+  // pre-fill an unset swatch and, on save, to detect "the user dragged
+  // this back to the default" so it's stored as an actual reset (null)
+  // rather than an explicit override that just happens to match.
+  const DEFAULT_COLORS: Record<keyof TerminalColors, string> = {
+    black: "#2e3436",
+    red: "#cc0000",
+    green: "#4e9a06",
+    yellow: "#c4a000",
+    blue: "#3465a4",
+    magenta: "#75507b",
+    cyan: "#06989a",
+    white: "#d3d7cf",
+    brightBlack: "#555753",
+    brightRed: "#ef2929",
+    brightGreen: "#8ae234",
+    brightYellow: "#fce94f",
+    brightBlue: "#729fcf",
+    brightMagenta: "#ad7fa8",
+    brightCyan: "#34e2e2",
+    brightWhite: "#eeeeec",
+  };
+
+  const SWATCHES: Array<{ key: keyof TerminalColors; label: string }> = [
+    { key: "black", label: "Black" },
+    { key: "red", label: "Red" },
+    { key: "green", label: "Green" },
+    { key: "yellow", label: "Yellow" },
+    { key: "blue", label: "Blue" },
+    { key: "magenta", label: "Magenta" },
+    { key: "cyan", label: "Cyan" },
+    { key: "white", label: "White" },
+  ];
+  const BRIGHT_SWATCHES: Array<{ key: keyof TerminalColors; label: string }> = [
+    { key: "brightBlack", label: "Black" },
+    { key: "brightRed", label: "Red" },
+    { key: "brightGreen", label: "Green" },
+    { key: "brightYellow", label: "Yellow" },
+    { key: "brightBlue", label: "Blue" },
+    { key: "brightMagenta", label: "Magenta" },
+    { key: "brightCyan", label: "Cyan" },
+    { key: "brightWhite", label: "White" },
+  ];
+
   let fontFamily = terminalFontFamily;
   let fontSize = terminalFontSize;
+  // Always holds a real hex per swatch (never null) so <input type="color">
+  // always has something valid to show — an unset override just displays
+  // the default until touched.
+  let colors: Record<keyof TerminalColors, string> = { ...DEFAULT_COLORS, ...stripNulls(terminalColors) };
   let panelEl: HTMLDivElement;
+
+  function stripNulls(input: TerminalColors): Partial<Record<keyof TerminalColors, string>> {
+    const result: Partial<Record<keyof TerminalColors, string>> = {};
+    for (const key of Object.keys(input) as Array<keyof TerminalColors>) {
+      const value = input[key];
+      if (value) result[key] = value;
+    }
+    return result;
+  }
+
+  function resetColors() {
+    colors = { ...DEFAULT_COLORS };
+  }
 
   $: canSubmit = fontFamily.trim().length > 0 && fontSize >= 8 && fontSize <= 32;
 
   function submit() {
     if (!canSubmit) return;
-    dispatch("save", { terminalFontFamily: fontFamily.trim(), terminalFontSize: fontSize });
+    // A swatch matching the default is stored as unset (null) rather than
+    // an override that happens to equal it — keeps a config someone hasn't
+    // touched clean, and makes "drag back to default" behave like a reset.
+    const overrides: TerminalColors = {};
+    for (const key of Object.keys(colors) as Array<keyof TerminalColors>) {
+      if (colors[key].toLowerCase() !== DEFAULT_COLORS[key].toLowerCase()) {
+        overrides[key] = colors[key];
+      }
+    }
+    dispatch("save", { terminalFontFamily: fontFamily.trim(), terminalFontSize: fontSize, terminalColors: overrides });
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -60,8 +133,35 @@
           <input type="number" bind:value={fontSize} min="8" max="32" />
         </label>
         <p class="hint">
-          Applies to every new terminal tab opened afterward. "monospace" uses your system's default monospace
-          font — type a specific font name instead if you have one installed you'd rather use.
+          Applies immediately to every open terminal, not just new ones. "monospace" uses your system's default
+          monospace font — type a specific font name instead if you have one installed you'd rather use.
+        </p>
+      </section>
+
+      <section class="card">
+        <div class="colors-header">
+          <span class="section-title">Terminal colors</span>
+          <button class="reset-link" type="button" on:click={resetColors}>Reset to defaults</button>
+        </div>
+        <div class="swatch-row">
+          {#each SWATCHES as swatch (swatch.key)}
+            <label class="swatch" title={swatch.label}>
+              <input type="color" bind:value={colors[swatch.key]} aria-label={swatch.label} />
+              <span>{swatch.label}</span>
+            </label>
+          {/each}
+        </div>
+        <div class="swatch-row">
+          {#each BRIGHT_SWATCHES as swatch (swatch.key)}
+            <label class="swatch" title={`Bright ${swatch.label}`}>
+              <input type="color" bind:value={colors[swatch.key]} aria-label={`Bright ${swatch.label}`} />
+              <span>{swatch.label}</span>
+            </label>
+          {/each}
+        </div>
+        <p class="hint">
+          Only changes this machine's config — never shared or synced anywhere. These are the ANSI colors a shell
+          prompt or command output picks from; they don't affect the app's own UI colors.
         </p>
       </section>
     </div>
@@ -85,7 +185,8 @@
   }
 
   .panel {
-    width: min(380px, 90vw);
+    width: min(420px, 90vw);
+    max-height: 85vh;
     background: var(--surface-2);
     border-radius: var(--radius-lg);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
@@ -129,6 +230,10 @@
 
   .content {
     padding: var(--space-4);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
 
   .card {
@@ -145,6 +250,25 @@
     color: var(--fg-tertiary);
   }
 
+  .colors-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .reset-link {
+    border: none;
+    background: transparent;
+    color: var(--fg-secondary);
+    font-size: 0.68rem;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .reset-link:hover {
+    color: var(--fg-primary);
+  }
+
   .field {
     display: flex;
     flex-direction: column;
@@ -153,7 +277,8 @@
     color: var(--fg-secondary);
   }
 
-  input {
+  input[type="text"],
+  input[type="number"] {
     background: var(--surface-1);
     border: none;
     border-radius: var(--radius-sm);
@@ -161,8 +286,52 @@
     color: var(--fg-primary);
     font-size: 0.8rem;
   }
-  input:focus-visible {
+  input[type="text"]:focus-visible,
+  input[type="number"]:focus-visible {
     box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .swatch-row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .swatch {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .swatch span {
+    font-size: 0.62rem;
+    color: var(--fg-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .swatch input[type="color"] {
+    width: 100%;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+  }
+  /* Firefox/WebKitGTK both render a color swatch with its own inset
+     border/padding by default — flattening it to a plain filled rectangle
+     matches every other input in this app instead of looking like a
+     native OS control dropped into a themed panel. */
+  .swatch input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .swatch input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: var(--radius-sm);
   }
 
   .hint {
