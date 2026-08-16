@@ -43,29 +43,34 @@
   --status-disconnected: #726f66;
   --status-error: #ef4444;
 
-  /* Terminal ANSI 16-color palette — these are xterm.js's OWN built-in
-     defaults (the classic Tango palette), copied verbatim so the terminal
-     looks identical to today unless a user overrides one via Settings
-     (App.svelte's applyTerminalColorVars sets only the specific properties
-     a per-machine override actually touches, leaving the rest at these
-     defaults). Terminal.svelte reads all sixteen via getComputedStyle when
-     building xterm.js's theme. */
-  --ansi-black: #2e3436;
-  --ansi-red: #cc0000;
-  --ansi-green: #4e9a06;
-  --ansi-yellow: #c4a000;
-  --ansi-blue: #3465a4;
-  --ansi-magenta: #75507b;
-  --ansi-cyan: #06989a;
-  --ansi-white: #d3d7cf;
-  --ansi-bright-black: #555753;
-  --ansi-bright-red: #ef2929;
-  --ansi-bright-green: #8ae234;
-  --ansi-bright-yellow: #fce94f;
-  --ansi-bright-blue: #729fcf;
-  --ansi-bright-magenta: #ad7fa8;
-  --ansi-bright-cyan: #34e2e2;
-  --ansi-bright-white: #eeeeec;
+  /* Terminal ANSI 16-color palette — Portus's own default, not xterm.js's
+     generic built-in one. Muted/desaturated to match the rest of this
+     tonal, low-saturation UI instead of clashing with it, and several
+     slots deliberately reuse existing tokens so the terminal reads as part
+     of the same app rather than a stock xterm.js window dropped into it:
+     yellow/brightRed pull from the connection-status colors above, cyan is
+     the app's own accent, and black/white/their bright counterparts track
+     the surface/foreground scale. Changing a swatch in Settings overrides
+     the specific property here (App.svelte's applyTerminalColorVars);
+     "Reset to defaults" there must match this list exactly — see
+     SettingsPanel.svelte's DEFAULT_COLORS. Terminal.svelte reads all
+     sixteen via getComputedStyle when building xterm.js's theme. */
+  --ansi-black: #3a3a42;
+  --ansi-red: #e0645a;
+  --ansi-green: #8bb87f;
+  --ansi-yellow: #d7c37a; /* = --status-connecting */
+  --ansi-blue: #7a9cc6;
+  --ansi-magenta: #b98cc6;
+  --ansi-cyan: #4dd0c8; /* = --accent */
+  --ansi-white: #97958d; /* = --fg-secondary */
+  --ansi-bright-black: #726f66; /* = --fg-tertiary */
+  --ansi-bright-red: #ef4444; /* = --status-error */
+  --ansi-bright-green: #a3d18f;
+  --ansi-bright-yellow: #e8d599;
+  --ansi-bright-blue: #9bb8d9;
+  --ansi-bright-magenta: #cba3d9;
+  --ansi-bright-cyan: #6dd9d1;
+  --ansi-bright-white: #ecebe7; /* = --fg-primary */
 
   /* Typography — Inter isn't bundled, same as FlashPad; it's used when
      present on the system and falls back to the platform sans otherwise. */
