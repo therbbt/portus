@@ -11,28 +11,29 @@
     cancel: void;
   }>();
 
-  // xterm.js's own built-in ANSI palette (the classic Tango colors) —
-  // must match tokens.css's --ansi-* defaults exactly. Used both to
-  // pre-fill an unset swatch and, on save, to detect "the user dragged
-  // this back to the default" so it's stored as an actual reset (null)
-  // rather than an explicit override that just happens to match.
+  // Portus's own default ANSI palette, not a generic stock one — must
+  // match tokens.css's --ansi-* defaults exactly (see the comment there
+  // for why each color is what it is). Used both to pre-fill an unset
+  // swatch and, on save, to detect "the user dragged this back to the
+  // default" so it's stored as an actual reset (null) rather than an
+  // explicit override that just happens to match.
   const DEFAULT_COLORS: Record<keyof TerminalColors, string> = {
-    black: "#2e3436",
-    red: "#cc0000",
-    green: "#4e9a06",
-    yellow: "#c4a000",
-    blue: "#3465a4",
-    magenta: "#75507b",
-    cyan: "#06989a",
-    white: "#d3d7cf",
-    brightBlack: "#555753",
-    brightRed: "#ef2929",
-    brightGreen: "#8ae234",
-    brightYellow: "#fce94f",
-    brightBlue: "#729fcf",
-    brightMagenta: "#ad7fa8",
-    brightCyan: "#34e2e2",
-    brightWhite: "#eeeeec",
+    black: "#3a3a42",
+    red: "#e0645a",
+    green: "#8bb87f",
+    yellow: "#d7c37a",
+    blue: "#7a9cc6",
+    magenta: "#b98cc6",
+    cyan: "#4dd0c8",
+    white: "#97958d",
+    brightBlack: "#726f66",
+    brightRed: "#ef4444",
+    brightGreen: "#a3d18f",
+    brightYellow: "#e8d599",
+    brightBlue: "#9bb8d9",
+    brightMagenta: "#cba3d9",
+    brightCyan: "#6dd9d1",
+    brightWhite: "#ecebe7",
   };
 
   const SWATCHES: Array<{ key: keyof TerminalColors; label: string }> = [
