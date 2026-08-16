@@ -44,32 +44,35 @@
   --status-error: #ef4444;
 
   /* Terminal ANSI 16-color palette — Portus's own default, not xterm.js's
-     generic built-in one. Muted/desaturated to match the rest of this
-     tonal, low-saturation UI instead of clashing with it, and several
-     slots deliberately reuse existing tokens so the terminal reads as part
-     of the same app rather than a stock xterm.js window dropped into it:
-     yellow/brightRed pull from the connection-status colors above, cyan is
-     the app's own accent, and black/white/their bright counterparts track
-     the surface/foreground scale. Changing a swatch in Settings overrides
-     the specific property here (App.svelte's applyTerminalColorVars);
-     "Reset to defaults" there must match this list exactly — see
-     SettingsPanel.svelte's DEFAULT_COLORS. Terminal.svelte reads all
-     sixteen via getComputedStyle when building xterm.js's theme. */
+     generic built-in one, and coordinated with the accent rather than just
+     borrowing it for one slot: every hue color below (red/green/yellow/
+     blue/magenta/cyan, normal and bright) shares the accent's exact
+     saturation (58%), so the palette reads as one family instead of
+     scattered independent picks. Green is the accent's own hue outright —
+     bright green *is* --accent exactly (#4dd0c8) — since that's the ANSI
+     slot a bold `user@host` shell prompt actually renders with by default,
+     making "the hostname is Portus's accent color" literal, not close.
+     Black/white and their bright counterparts are neutral, tracking the
+     surface/foreground scale instead of a hue. Changing a swatch in
+     Settings overrides the specific property here (App.svelte's
+     applyTerminalColorVars); "Reset to defaults" there must match this
+     list exactly — see SettingsPanel.svelte's DEFAULT_COLORS. Terminal.svelte
+     reads all sixteen via getComputedStyle when building xterm.js's theme. */
   --ansi-black: #3a3a42;
-  --ansi-red: #e0645a;
-  --ansi-green: #8bb87f;
-  --ansi-yellow: #d7c37a; /* = --status-connecting */
-  --ansi-blue: #7a9cc6;
-  --ansi-magenta: #b98cc6;
-  --ansi-cyan: #4dd0c8; /* = --accent */
+  --ansi-red: #a1362b;
+  --ansi-green: #2ba19a;
+  --ansi-yellow: #a17e2b;
+  --ansi-blue: #2b5ea1;
+  --ansi-magenta: #862ba1;
+  --ansi-cyan: #2b86a1;
   --ansi-white: #97958d; /* = --fg-secondary */
   --ansi-bright-black: #726f66; /* = --fg-tertiary */
-  --ansi-bright-red: #ef4444; /* = --status-error */
-  --ansi-bright-green: #a3d18f;
-  --ansi-bright-yellow: #e8d599;
-  --ansi-bright-blue: #9bb8d9;
-  --ansi-bright-magenta: #cba3d9;
-  --ansi-bright-cyan: #6dd9d1;
+  --ansi-bright-red: #d05a4d;
+  --ansi-bright-green: #4dd0c8; /* = --accent, exactly — this is what a bold PS1 hostname renders with */
+  --ansi-bright-yellow: #d0a94d;
+  --ansi-bright-blue: #4d86d0;
+  --ansi-bright-magenta: #b14dd0;
+  --ansi-bright-cyan: #4db1d0;
   --ansi-bright-white: #ecebe7; /* = --fg-primary */
 
   /* Typography — Inter isn't bundled, same as FlashPad; it's used when
