@@ -218,4 +218,24 @@
   .terminal-host :global(.xterm) {
     height: 100%;
   }
+  /* xterm.js keeps a hidden <textarea> (its real keyboard-input target,
+     positioned over the cursor cell for IME support) that's supposed to be
+     fully invisible via opacity:0/width:0/height:0 in its own CSS —
+     WebKitGTK (this app's Linux webview) doesn't reliably honor that for a
+     focused element's native blinking caret, so it can render through at
+     wherever xterm last positioned it, looking like a stray cursor sitting
+     in the wrong spot after switching tabs. caret-color is the direct,
+     standards-based way to suppress that specific rendering without
+     touching the element's actual (working) input capture. Also strip our
+     own global *:focus-visible ring (tokens.css) for the same element —
+     programmatically focusing it (see the $: block above) can trigger that
+     heuristic too, and a teal box-shadow ring reads just as much like a
+     misplaced cursor as a native caret would. */
+  .terminal-host :global(.xterm-helper-textarea) {
+    caret-color: transparent;
+  }
+  .terminal-host :global(.xterm-helper-textarea:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
+  }
 </style>
