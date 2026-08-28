@@ -119,9 +119,11 @@
       {#if creatingFolder}
         <li class="folder-row">
           <span class="chevron-spacer"></span>
-          <svg class="folder-icon" width="17" height="17" viewBox="0 0 16 16">
-            <path fill="currentColor" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.17a1.5 1.5 0 0 1 1.06.44l.83.82H13A1.5 1.5 0 0 1 14.5 4.26V12.5A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5V3Z" />
-          </svg>
+          <!-- No folder icon yet here — pairing that (fairly saturated
+               orange) icon with the input's own accent border made naming
+               a brand-new folder read as two strong colors firing at once.
+               The icon shows up once the folder actually exists (the
+               {#each rootGroups} row below this one). -->
           <input
             class="rename-input"
             bind:value={newFolderName}
