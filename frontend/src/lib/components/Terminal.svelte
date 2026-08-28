@@ -46,8 +46,18 @@
   // paired with its own redundant resizeSession() call on top of the one
   // onResize already makes; both together were enough IPC + layout thrash
   // per tick to make content visibly stop updating mid-drag.
+  //
+  // The `active` guard matters for a different reason: the ResizeObserver
+  // below watches `container` unconditionally, and a hidden tab's
+  // container (display:none) reports a 0x0 content rect — without this
+  // guard, fit() would resize the terminal down to a degenerate size while
+  // it's off-screen, corrupting xterm's tracked cursor position (it stays
+  // wrong even once the tab is shown and refit back to full size, since
+  // the buffer reflow through that 0x0 intermediate state doesn't
+  // reconstruct it correctly). That's what a stray blinking cursor sitting
+  // mid-prompt after switching tabs turned out to be.
   function applyFit() {
-    if (!term || !sessionId) return;
+    if (!term || !sessionId || !active) return;
     fitAddon.fit();
   }
 
