@@ -178,9 +178,21 @@
     term?.dispose();
   });
 
+  // Becoming the visible tab can reveal a stale size (it was 0x0 while
+  // hidden) — fit() corrects the cell grid, but xterm.js also positions a
+  // hidden <textarea> (its real keyboard-input target, kept aligned with
+  // the cursor cell for IME support) using those same now-stale metrics.
+  // If that textarea doesn't get repositioned before it's focused again,
+  // the browser's native text caret can render at a leftover pixel
+  // position that happens to land mid-word in the prompt text instead of
+  // at the actual cursor — term.focus() after the fit forces xterm to
+  // resync it, and doubles as switching tabs actually being ready to type
+  // in immediately.
   $: if (active && term && fitAddon) {
-    // Becoming the visible tab can reveal a stale size (it was 0x0 while hidden).
-    requestAnimationFrame(applyFit);
+    requestAnimationFrame(() => {
+      applyFit();
+      term.focus();
+    });
   }
 
   // Fires once redundantly right after onMount creates `term` (harmless —
