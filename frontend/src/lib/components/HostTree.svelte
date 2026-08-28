@@ -119,7 +119,7 @@
       {#if creatingFolder}
         <li class="folder-row">
           <span class="chevron-spacer"></span>
-          <svg class="folder-icon" width="14" height="14" viewBox="0 0 16 16">
+          <svg class="folder-icon" width="17" height="17" viewBox="0 0 16 16">
             <path fill="currentColor" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.17a1.5 1.5 0 0 1 1.06.44l.83.82H13A1.5 1.5 0 0 1 14.5 4.26V12.5A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5V3Z" />
           </svg>
           <input
@@ -150,7 +150,7 @@
               <path d="M3 1 L7 5 L3 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </span>
-          <svg class="folder-icon" width="14" height="14" viewBox="0 0 16 16">
+          <svg class="folder-icon" width="17" height="17" viewBox="0 0 16 16">
             <path fill="currentColor" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.17a1.5 1.5 0 0 1 1.06.44l.83.82H13A1.5 1.5 0 0 1 14.5 4.26V12.5A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5V3Z" />
           </svg>
           {#if renamingGroupId === group.id}
@@ -324,10 +324,13 @@
   }
   .host-row:hover,
   .folder-row:hover {
-    background: var(--surface-3);
+    background: var(--surface-2);
   }
   .host-row.nested {
-    padding-left: 1.1rem;
+    /* Matches FlashPad's TreeNode indent step (depth * 14px, roughly 30px
+       for a leaf one level in) rather than Portus's previous, noticeably
+       shallower 1.1rem. */
+    padding-left: 1.75rem;
   }
   .host-main {
     flex: 1;
@@ -356,7 +359,7 @@
     white-space: nowrap;
   }
   .folder-row {
-    padding: 0.3rem 0.4rem;
+    padding: 0.22rem 0.4rem;
     gap: 0.35rem;
     cursor: pointer;
     user-select: none;
@@ -377,7 +380,7 @@
   }
   .chevron {
     flex-shrink: 0;
-    color: var(--fg-tertiary);
+    color: var(--fg-secondary);
     transition: transform 0.1s ease;
   }
   .chevron.open {
@@ -430,11 +433,11 @@
     min-width: 0;
     font-size: 0.78rem;
     font-family: inherit;
-    background: var(--surface-0);
+    background: var(--surface-1);
     color: var(--fg-primary);
-    border: none;
+    border: 1px solid var(--accent);
     border-radius: var(--radius-sm);
-    padding: 1px 4px;
+    padding: 0 0.2rem;
   }
   .rename-input:focus-visible {
     outline: none;
