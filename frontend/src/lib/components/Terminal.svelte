@@ -46,8 +46,18 @@
   // paired with its own redundant resizeSession() call on top of the one
   // onResize already makes; both together were enough IPC + layout thrash
   // per tick to make content visibly stop updating mid-drag.
+  //
+  // The `active` guard matters for a different reason: the ResizeObserver
+  // below watches `container` unconditionally, and a hidden tab's
+  // container (display:none) reports a 0x0 content rect — without this
+  // guard, fit() would resize the terminal down to a degenerate size while
+  // it's off-screen, corrupting xterm's tracked cursor position (it stays
+  // wrong even once the tab is shown and refit back to full size, since
+  // the buffer reflow through that 0x0 intermediate state doesn't
+  // reconstruct it correctly). That's what a stray blinking cursor sitting
+  // mid-prompt after switching tabs turned out to be.
   function applyFit() {
-    if (!term || !sessionId) return;
+    if (!term || !sessionId || !active) return;
     fitAddon.fit();
   }
 
@@ -178,9 +188,21 @@
     term?.dispose();
   });
 
+  // Becoming the visible tab can reveal a stale size (it was 0x0 while
+  // hidden) — fit() corrects the cell grid, but xterm.js also positions a
+  // hidden <textarea> (its real keyboard-input target, kept aligned with
+  // the cursor cell for IME support) using those same now-stale metrics.
+  // If that textarea doesn't get repositioned before it's focused again,
+  // the browser's native text caret can render at a leftover pixel
+  // position that happens to land mid-word in the prompt text instead of
+  // at the actual cursor — term.focus() after the fit forces xterm to
+  // resync it, and doubles as switching tabs actually being ready to type
+  // in immediately.
   $: if (active && term && fitAddon) {
-    // Becoming the visible tab can reveal a stale size (it was 0x0 while hidden).
-    requestAnimationFrame(applyFit);
+    requestAnimationFrame(() => {
+      applyFit();
+      term.focus();
+    });
   }
 
   // Fires once redundantly right after onMount creates `term` (harmless —
@@ -205,5 +227,25 @@
   }
   .terminal-host :global(.xterm) {
     height: 100%;
+  }
+  /* xterm.js keeps a hidden <textarea> (its real keyboard-input target,
+     positioned over the cursor cell for IME support) that's supposed to be
+     fully invisible via opacity:0/width:0/height:0 in its own CSS —
+     WebKitGTK (this app's Linux webview) doesn't reliably honor that for a
+     focused element's native blinking caret, so it can render through at
+     wherever xterm last positioned it, looking like a stray cursor sitting
+     in the wrong spot after switching tabs. caret-color is the direct,
+     standards-based way to suppress that specific rendering without
+     touching the element's actual (working) input capture. Also strip our
+     own global *:focus-visible ring (tokens.css) for the same element —
+     programmatically focusing it (see the $: block above) can trigger that
+     heuristic too, and a teal box-shadow ring reads just as much like a
+     misplaced cursor as a native caret would. */
+  .terminal-host :global(.xterm-helper-textarea) {
+    caret-color: transparent;
+  }
+  .terminal-host :global(.xterm-helper-textarea:focus-visible) {
+    outline: none !important;
+    box-shadow: none !important;
   }
 </style>
