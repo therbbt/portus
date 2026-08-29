@@ -87,7 +87,7 @@
     gap: 2px;
     padding: 0 0.3rem;
   }
-  /* Same shape/tier as NewSessionMenu's and SplitMenu's .toolbar-btn —
+  /* Same shape/tier as NewSessionButton's and SplitMenu's .toolbar-btn —
      these two are plain actions rather than dropdowns, so no caret. */
   .toolbar-btn {
     flex-shrink: 0;

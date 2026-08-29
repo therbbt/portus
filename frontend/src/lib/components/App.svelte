@@ -10,11 +10,11 @@
   import SshConnectDialog from "./SshConnectDialog.svelte";
   import SerialConnectDialog from "./SerialConnectDialog.svelte";
   import ShellConnectDialog from "./ShellConnectDialog.svelte";
-  import RdpConnectDialog from "./RdpConnectDialog.svelte";
+  import NewSessionDialog from "./NewSessionDialog.svelte";
   import SftpPanel from "./SftpPanel.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import ShortcutsPanel from "./ShortcutsPanel.svelte";
-  import NewSessionMenu from "./NewSessionMenu.svelte";
+  import NewSessionButton from "./NewSessionButton.svelte";
   import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
   import type {
     Protocol,
@@ -70,7 +70,11 @@
   let showSshDialog = false;
   let showSerialDialog = false;
   let showShellPresetDialog = false;
-  let showRdpDialog = false;
+  // Create-only - see NewSessionDialog.svelte. Editing an existing saved
+  // session still goes through the three flags above (SSH/Serial/Shell -
+  // RDP has no edit path, so it has no equivalent here at all anymore).
+  let showNewSessionDialog = false;
+  let newSessionInitialType: "ssh" | "rdp" | "shell" | "serial" = "ssh";
   let showSftpPanel = false;
   let showSettingsPanel = false;
   let showShortcutsPanel = false;
@@ -272,10 +276,6 @@
     panes = restPanes;
   }
 
-  function openSshDialog() {
-    showSshDialog = true;
-  }
-
   async function onSshConnect(detail: { options: SshConnectOptions; save: SaveSessionInput | null }) {
     showSshDialog = false;
     editingSshSession = null;
@@ -286,10 +286,6 @@
       const result = await saveSession(save);
       sessions = result.sessions;
     }
-  }
-
-  function openSerialDialog() {
-    showSerialDialog = true;
   }
 
   async function onSerialConnect(detail: { options: SerialConnectOptions; save: SaveSessionInput | null }) {
@@ -310,11 +306,23 @@
     showSshDialog = false;
     showSerialDialog = false;
     showShellPresetDialog = false;
+    showNewSessionDialog = false;
     editingSshSession = null;
     editingSerialSession = null;
     editingShellSession = null;
     const result = await saveSession(input);
     sessions = result.sessions;
+  }
+
+  async function onNewSessionConnect(detail: { protocol: Protocol; title: string; options: SessionOptions; save: SaveSessionInput | null }) {
+    showNewSessionDialog = false;
+    const { protocol, title, options, save } = detail;
+    openTab(protocol, title, options, save?.id ?? undefined);
+
+    if (save) {
+      const result = await saveSession(save);
+      sessions = result.sessions;
+    }
   }
 
   function onEditSession(session: SavedSession) {
@@ -369,15 +377,6 @@
     await setGroupCollapsed(group.id, collapsed);
   }
 
-  function openRdpDialog() {
-    showRdpDialog = true;
-  }
-
-  function onRdpConnect(options: RdpConnectOptions) {
-    showRdpDialog = false;
-    openTab("rdp", `${options.username}@${options.host}`, options);
-  }
-
   async function connectToSavedSession(session: SavedSession) {
     const secret = await resolveSessionSecret(session.id).catch(() => null);
 
@@ -400,8 +399,9 @@
       const options: ShellConnectOptions = { shellCommand: session.shellCommand ?? null, workingDir: session.workingDir ?? null };
       openTab("shell", session.name, options, session.id);
     } else if (session.protocol === "rdp") {
-      // No UI saves an RDP session yet (see RdpConnectDialog) — this only
-      // matters for a hand-edited config.json, which the format allows.
+      // No UI saves an RDP session yet (NewSessionDialog's RDP tab is
+      // connect-only) — this only matters for a hand-edited config.json,
+      // which the format allows.
       const options: RdpConnectOptions = {
         host: session.address,
         port: session.port ?? undefined,
@@ -479,12 +479,11 @@
   />
   <div class="action-bar">
     <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
-      <NewSessionMenu
-        on:newSsh={openSshDialog}
-        on:newRdp={openRdpDialog}
-        on:newSerial={openSerialDialog}
-        on:newShell={newShellTab}
-        on:newShellPreset={() => (showShellPresetDialog = true)}
+      <NewSessionButton
+        on:open={() => {
+          newSessionInitialType = "ssh";
+          showNewSessionDialog = true;
+        }}
       />
     </div>
     <div class="action-bar-main">
@@ -537,10 +536,22 @@
         {/each}
         {#if tabs.length === 0}
           <EmptyMainArea
-            on:newShell={newShellTab}
-            on:newSsh={openSshDialog}
-            on:newSerial={openSerialDialog}
-            on:newRdp={openRdpDialog}
+            on:newShell={() => {
+              newSessionInitialType = "shell";
+              showNewSessionDialog = true;
+            }}
+            on:newSsh={() => {
+              newSessionInitialType = "ssh";
+              showNewSessionDialog = true;
+            }}
+            on:newSerial={() => {
+              newSessionInitialType = "serial";
+              showNewSessionDialog = true;
+            }}
+            on:newRdp={() => {
+              newSessionInitialType = "rdp";
+              showNewSessionDialog = true;
+            }}
           />
         {/if}
       </div>
@@ -583,8 +594,14 @@
       }}
     />
   {/if}
-  {#if showRdpDialog}
-    <RdpConnectDialog on:connect={(e) => onRdpConnect(e.detail)} on:cancel={() => (showRdpDialog = false)} />
+  {#if showNewSessionDialog}
+    <NewSessionDialog
+      {groups}
+      initialType={newSessionInitialType}
+      on:connect={(e) => onNewSessionConnect(e.detail)}
+      on:save={(e) => onSaveSessionOnly(e.detail)}
+      on:cancel={() => (showNewSessionDialog = false)}
+    />
   {/if}
   {#if showSftpPanel && activeSshOptions && activePane}
     <SftpPanel
