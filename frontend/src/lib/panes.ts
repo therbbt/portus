@@ -10,8 +10,8 @@ export interface PaneState {
   options?: SessionOptions;
   title: string;
   state: SessionState;
-  /** Set only for a saved host's session — see Terminal.svelte's hostId prop. */
-  hostId?: string;
+  /** Set only when opening a saved session — see Terminal.svelte's savedSessionId prop. */
+  savedSessionId?: string;
   /** Reserves a slot in the app-wide "Terminal N" sequence; freed when the pane closes. */
   shellNumber?: number;
   /** Once the user renames a pane, session-driven title updates stop overwriting it. */

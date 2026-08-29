@@ -51,22 +51,23 @@ export interface ShellConnectOptions {
 
 export type SessionOptions = SshConnectOptions | SerialConnectOptions | RdpConnectOptions | ShellConnectOptions | undefined;
 
-/** `hostId` is set only when this tab is a saved host's session — it's what
- * unlocks scrollback persistence for a saved shell preset on the backend
- * (see portus_core::scrollback). An ad-hoc tab has no stable identity to
- * persist scrollback under, so it's omitted for those. */
-export async function openSession(protocol: Protocol, options?: SessionOptions, hostId?: string): Promise<string> {
-  return invoke<string>("session_open", { protocol, options: options ?? null, hostId: hostId ?? null });
+/** `savedSessionId` is set only when this tab is opening a saved session —
+ * it's what unlocks scrollback persistence for a saved shell preset on the
+ * backend (see portus_core::scrollback). An ad-hoc tab has no stable
+ * identity to persist scrollback under, so it's omitted for those. */
+export async function openSession(protocol: Protocol, options?: SessionOptions, savedSessionId?: string): Promise<string> {
+  return invoke<string>("session_open", { protocol, options: options ?? null, savedSessionId: savedSessionId ?? null });
 }
 
 export async function listSerialPorts(): Promise<string[]> {
   return invoke<string[]>("list_serial_ports");
 }
 
-// --- Saved hosts -----------------------------------------------------------
-// Mirrors portus-core's Config/Host/AuthMethod. AuthMethodDto's handle
-// fields are opaque keychain references, not secrets — never used directly
-// as a password. Call resolveHostSecret() to get the real value back.
+// --- Saved sessions ----------------------------------------------------------
+// Mirrors portus-core's Config/SavedSession/AuthMethod. AuthMethodDto's
+// handle fields are opaque keychain references, not secrets — never used
+// directly as a password. Call resolveSessionSecret() to get the real value
+// back.
 
 export interface AuthMethodDto {
   type: "none" | "password" | "privateKey";
@@ -75,7 +76,7 @@ export interface AuthMethodDto {
   passphraseHandle?: string | null;
 }
 
-export interface Host {
+export interface SavedSession {
   id: string;
   name: string;
   groupId?: string | null;
@@ -124,7 +125,7 @@ export interface TerminalColors {
 export interface PortusConfig {
   schemaVersion: number;
   groups: Group[];
-  hosts: Host[];
+  sessions: SavedSession[];
   settings: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors };
 }
 
@@ -136,17 +137,17 @@ export async function saveConfig(config: PortusConfig): Promise<void> {
   await invoke("save_config", { config });
 }
 
-/** What save_host expects for the auth half — the raw secret, not a handle.
- * `unchanged` reuses whatever the host being edited already has stored,
- * without touching the keychain — lets an edit dialog leave the credential
- * field blank instead of forcing a retype on every edit. */
+/** What save_session expects for the auth half — the raw secret, not a
+ * handle. `unchanged` reuses whatever the session being edited already has
+ * stored, without touching the keychain — lets an edit dialog leave the
+ * credential field blank instead of forcing a retype on every edit. */
 export type AuthInput =
   | { type: "none" }
   | { type: "unchanged" }
   | { type: "password"; password: string }
   | { type: "privateKey"; path: string; passphrase?: string | null };
 
-export interface SaveHostInput {
+export interface SaveSessionInput {
   id?: string | null;
   name: string;
   groupId?: string | null;
@@ -160,12 +161,12 @@ export interface SaveHostInput {
   workingDir?: string | null;
 }
 
-export async function saveHost(input: SaveHostInput): Promise<PortusConfig> {
-  return invoke<PortusConfig>("save_host", { ...input });
+export async function saveSession(input: SaveSessionInput): Promise<PortusConfig> {
+  return invoke<PortusConfig>("save_session", { ...input });
 }
 
-export async function deleteHost(hostId: string): Promise<PortusConfig> {
-  return invoke<PortusConfig>("delete_host", { hostId });
+export async function deleteSession(savedSessionId: string): Promise<PortusConfig> {
+  return invoke<PortusConfig>("delete_session", { savedSessionId });
 }
 
 // --- Groups (sidebar folders) ----------------------------------------------
@@ -188,11 +189,11 @@ export async function setGroupCollapsed(groupId: string, collapsed: boolean): Pr
   return invoke<PortusConfig>("set_group_collapsed", { groupId, collapsed });
 }
 
-/** Pulls a saved host's password/passphrase back out of the keychain. `null`
- * if the host has no stored credential (AuthMethod::None, or a private key
- * with no saved passphrase). */
-export async function resolveHostSecret(hostId: string): Promise<string | null> {
-  return invoke<string | null>("resolve_host_secret", { hostId });
+/** Pulls a saved session's password/passphrase back out of the keychain.
+ * `null` if the session has no stored credential (AuthMethod::None, or a
+ * private key with no saved passphrase). */
+export async function resolveSessionSecret(savedSessionId: string): Promise<string | null> {
+  return invoke<string | null>("resolve_session_secret", { savedSessionId });
 }
 
 export async function writeSession(sessionId: string, data: Uint8Array): Promise<void> {

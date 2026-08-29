@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import TitleBar from "./TitleBar.svelte";
   import ResizeHandles from "./ResizeHandles.svelte";
-  import HostTree from "./HostTree.svelte";
+  import SessionTree from "./SessionTree.svelte";
   import SidebarResizer from "./SidebarResizer.svelte";
   import TabStrip from "./TabStrip.svelte";
   import PaneGrid from "./PaneGrid.svelte";
@@ -14,7 +14,7 @@
   import SftpPanel from "./SftpPanel.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
   import ShortcutsPanel from "./ShortcutsPanel.svelte";
-  import NewConnectionMenu from "./NewConnectionMenu.svelte";
+  import NewSessionMenu from "./NewSessionMenu.svelte";
   import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
   import type {
     Protocol,
@@ -24,8 +24,8 @@
     SerialConnectOptions,
     ShellConnectOptions,
     RdpConnectOptions,
-    SaveHostInput,
-    Host,
+    SaveSessionInput,
+    SavedSession,
     Group,
     PortusConfig,
     TerminalColors,
@@ -33,9 +33,9 @@
   import {
     getConfig,
     saveConfig,
-    saveHost,
-    deleteHost,
-    resolveHostSecret,
+    saveSession,
+    deleteSession,
+    resolveSessionSecret,
     saveGroup,
     deleteGroup,
     setGroupCollapsed,
@@ -75,11 +75,11 @@
   let showSettingsPanel = false;
   let showShortcutsPanel = false;
   let contextMenu: { x: number; y: number; items: ContextMenuItem[] } | null = null;
-  let hosts: Host[] = [];
+  let sessions: SavedSession[] = [];
   let groups: Group[] = [];
-  let editingSshHost: Host | null = null;
-  let editingSerialHost: Host | null = null;
-  let editingShellHost: Host | null = null;
+  let editingSshSession: SavedSession | null = null;
+  let editingSerialSession: SavedSession | null = null;
+  let editingShellSession: SavedSession | null = null;
   let sidebarWidth = 260;
   let config: PortusConfig | null = null;
 
@@ -152,7 +152,7 @@
   onMount(async () => {
     try {
       config = await getConfig();
-      hosts = config.hosts;
+      sessions = config.sessions;
       groups = config.groups;
       applyTerminalFontVars(config.settings);
       applyTerminalColorVars(config.settings.terminalColors);
@@ -172,9 +172,9 @@
   async function onSaveSettings(detail: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors }) {
     showSettingsPanel = false;
     const next: PortusConfig = config ?? {
-      schemaVersion: 2,
+      schemaVersion: 3,
       groups: [],
-      hosts,
+      sessions,
       settings: { terminalFontFamily: "JetBrains Mono", terminalFontSize: 14, terminalColors: {} },
     };
     next.settings = detail;
@@ -187,9 +187,9 @@
     terminalAppearanceVersion.update((n) => n + 1);
   }
 
-  function createPane(protocol: Protocol, title: string, options: SessionOptions, hostId?: string, shellNumber?: number): string {
+  function createPane(protocol: Protocol, title: string, options: SessionOptions, savedSessionId?: string, shellNumber?: number): string {
     const id = crypto.randomUUID();
-    panes = { ...panes, [id]: { id, protocol, title, state: "connecting", options, hostId, shellNumber } };
+    panes = { ...panes, [id]: { id, protocol, title, state: "connecting", options, savedSessionId, shellNumber } };
     return id;
   }
 
@@ -202,8 +202,8 @@
     activeTabId = tabId;
   }
 
-  function openTab(protocol: Protocol, title: string, options: SessionOptions, hostId?: string) {
-    const paneId = createPane(protocol, title, options, hostId);
+  function openTab(protocol: Protocol, title: string, options: SessionOptions, savedSessionId?: string) {
+    const paneId = createPane(protocol, title, options, savedSessionId);
     const tabId = crypto.randomUUID();
     tabs = [...tabs, { id: tabId, title, layout: { type: "leaf", paneId }, activePaneId: paneId }];
     activeTabId = tabId;
@@ -276,15 +276,15 @@
     showSshDialog = true;
   }
 
-  async function onSshConnect(detail: { options: SshConnectOptions; save: SaveHostInput | null }) {
+  async function onSshConnect(detail: { options: SshConnectOptions; save: SaveSessionInput | null }) {
     showSshDialog = false;
-    editingSshHost = null;
+    editingSshSession = null;
     const { options, save } = detail;
     openTab("ssh", `${options.username}@${options.host}`, options);
 
     if (save) {
-      const result = await saveHost(save);
-      hosts = result.hosts;
+      const result = await saveSession(save);
+      sessions = result.sessions;
     }
   }
 
@@ -292,47 +292,47 @@
     showSerialDialog = true;
   }
 
-  async function onSerialConnect(detail: { options: SerialConnectOptions; save: SaveHostInput | null }) {
+  async function onSerialConnect(detail: { options: SerialConnectOptions; save: SaveSessionInput | null }) {
     showSerialDialog = false;
-    editingSerialHost = null;
+    editingSerialSession = null;
     const { options, save } = detail;
     openTab("serial", options.portName, options);
 
     if (save) {
-      const result = await saveHost(save);
-      hosts = result.hosts;
+      const result = await saveSession(save);
+      sessions = result.sessions;
     }
   }
 
-  /** From a connect dialog's standalone "Save" button — persists the host
-   * without opening a tab or connecting to it at all. */
-  async function onSaveHostOnly(input: SaveHostInput) {
+  /** From a connect dialog's standalone "Save" button — persists the
+   * session without opening a tab or connecting to it at all. */
+  async function onSaveSessionOnly(input: SaveSessionInput) {
     showSshDialog = false;
     showSerialDialog = false;
     showShellPresetDialog = false;
-    editingSshHost = null;
-    editingSerialHost = null;
-    editingShellHost = null;
-    const result = await saveHost(input);
-    hosts = result.hosts;
+    editingSshSession = null;
+    editingSerialSession = null;
+    editingShellSession = null;
+    const result = await saveSession(input);
+    sessions = result.sessions;
   }
 
-  function onEditHost(host: Host) {
-    if (host.protocol === "ssh") {
-      editingSshHost = host;
+  function onEditSession(session: SavedSession) {
+    if (session.protocol === "ssh") {
+      editingSshSession = session;
       showSshDialog = true;
-    } else if (host.protocol === "serial") {
-      editingSerialHost = host;
+    } else if (session.protocol === "serial") {
+      editingSerialSession = session;
       showSerialDialog = true;
-    } else if (host.protocol === "shell") {
-      editingShellHost = host;
+    } else if (session.protocol === "shell") {
+      editingShellSession = session;
       showShellPresetDialog = true;
     }
   }
 
-  async function onShellPresetConnect(detail: { options: ShellConnectOptions; save: SaveHostInput | null }) {
+  async function onShellPresetConnect(detail: { options: ShellConnectOptions; save: SaveSessionInput | null }) {
     showShellPresetDialog = false;
-    editingShellHost = null;
+    editingShellSession = null;
     const { options, save } = detail;
     const title = save?.name ?? options.shellCommand ?? "Terminal";
     // save.id is generated client-side by ShellConnectDialog, so it's known
@@ -341,8 +341,8 @@
     openTab("shell", title, options, save?.id ?? undefined);
 
     if (save) {
-      const result = await saveHost(save);
-      hosts = result.hosts;
+      const result = await saveSession(save);
+      sessions = result.sessions;
     }
   }
 
@@ -360,7 +360,7 @@
   async function onDeleteFolder(group: Group) {
     const result = await deleteGroup(group.id);
     groups = result.groups;
-    hosts = result.hosts;
+    sessions = result.sessions;
   }
 
   async function onToggleFolder(group: Group) {
@@ -378,43 +378,43 @@
     openTab("rdp", `${options.username}@${options.host}`, options);
   }
 
-  async function connectToSavedHost(host: Host) {
-    const secret = await resolveHostSecret(host.id).catch(() => null);
+  async function connectToSavedSession(session: SavedSession) {
+    const secret = await resolveSessionSecret(session.id).catch(() => null);
 
-    if (host.protocol === "ssh") {
+    if (session.protocol === "ssh") {
       const auth: SshConnectOptions["auth"] =
-        host.auth.type === "privateKey"
-          ? { type: "privateKey", path: host.auth.path ?? "", passphrase: secret }
+        session.auth.type === "privateKey"
+          ? { type: "privateKey", path: session.auth.path ?? "", passphrase: secret }
           : { type: "password", password: secret ?? "" };
       const options: SshConnectOptions = {
-        host: host.address,
-        port: host.port ?? undefined,
-        username: host.username ?? "",
+        host: session.address,
+        port: session.port ?? undefined,
+        username: session.username ?? "",
         auth,
       };
-      openTab("ssh", host.name, options);
-    } else if (host.protocol === "serial") {
-      const options: SerialConnectOptions = { portName: host.address, baudRate: host.baudRate ?? undefined };
-      openTab("serial", host.name, options);
-    } else if (host.protocol === "shell") {
-      const options: ShellConnectOptions = { shellCommand: host.shellCommand ?? null, workingDir: host.workingDir ?? null };
-      openTab("shell", host.name, options, host.id);
-    } else if (host.protocol === "rdp") {
-      // No UI saves an RDP host yet (see RdpConnectDialog) — this only
+      openTab("ssh", session.name, options);
+    } else if (session.protocol === "serial") {
+      const options: SerialConnectOptions = { portName: session.address, baudRate: session.baudRate ?? undefined };
+      openTab("serial", session.name, options);
+    } else if (session.protocol === "shell") {
+      const options: ShellConnectOptions = { shellCommand: session.shellCommand ?? null, workingDir: session.workingDir ?? null };
+      openTab("shell", session.name, options, session.id);
+    } else if (session.protocol === "rdp") {
+      // No UI saves an RDP session yet (see RdpConnectDialog) — this only
       // matters for a hand-edited config.json, which the format allows.
       const options: RdpConnectOptions = {
-        host: host.address,
-        port: host.port ?? undefined,
-        username: host.username ?? "",
+        host: session.address,
+        port: session.port ?? undefined,
+        username: session.username ?? "",
         password: secret ?? "",
       };
-      openTab("rdp", host.name, options);
+      openTab("rdp", session.name, options);
     }
   }
 
-  async function onDeleteHost(host: Host) {
-    const config = await deleteHost(host.id);
-    hosts = config.hosts;
+  async function onDeleteSession(session: SavedSession) {
+    const config = await deleteSession(session.id);
+    sessions = config.sessions;
   }
 
   function selectTab(id: string) {
@@ -479,7 +479,7 @@
   />
   <div class="action-bar">
     <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
-      <NewConnectionMenu
+      <NewSessionMenu
         on:newSsh={openSshDialog}
         on:newRdp={openRdpDialog}
         on:newSerial={openSerialDialog}
@@ -502,13 +502,13 @@
     </div>
   </div>
   <div class="body">
-    <HostTree
-      {hosts}
+    <SessionTree
+      {sessions}
       {groups}
       width={sidebarWidth}
-      on:connect={(e) => connectToSavedHost(e.detail)}
-      on:deleteHost={(e) => onDeleteHost(e.detail)}
-      on:editHost={(e) => onEditHost(e.detail)}
+      on:connect={(e) => connectToSavedSession(e.detail)}
+      on:deleteSession={(e) => onDeleteSession(e.detail)}
+      on:editSession={(e) => onEditSession(e.detail)}
       on:createFolder={(e) => onCreateFolder(e.detail.name)}
       on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
       on:deleteFolder={(e) => onDeleteFolder(e.detail)}
@@ -549,37 +549,37 @@
 
   {#if showSshDialog}
     <SshConnectDialog
-      editHost={editingSshHost}
+      editSession={editingSshSession}
       {groups}
       on:connect={(e) => onSshConnect(e.detail)}
-      on:save={(e) => onSaveHostOnly(e.detail)}
+      on:save={(e) => onSaveSessionOnly(e.detail)}
       on:cancel={() => {
         showSshDialog = false;
-        editingSshHost = null;
+        editingSshSession = null;
       }}
     />
   {/if}
   {#if showSerialDialog}
     <SerialConnectDialog
-      editHost={editingSerialHost}
+      editSession={editingSerialSession}
       {groups}
       on:connect={(e) => onSerialConnect(e.detail)}
-      on:save={(e) => onSaveHostOnly(e.detail)}
+      on:save={(e) => onSaveSessionOnly(e.detail)}
       on:cancel={() => {
         showSerialDialog = false;
-        editingSerialHost = null;
+        editingSerialSession = null;
       }}
     />
   {/if}
   {#if showShellPresetDialog}
     <ShellConnectDialog
-      editHost={editingShellHost}
+      editSession={editingShellSession}
       {groups}
       on:connect={(e) => onShellPresetConnect(e.detail)}
-      on:save={(e) => onSaveHostOnly(e.detail)}
+      on:save={(e) => onSaveSessionOnly(e.detail)}
       on:cancel={() => {
         showShellPresetDialog = false;
-        editingShellHost = null;
+        editingShellSession = null;
       }}
     />
   {/if}

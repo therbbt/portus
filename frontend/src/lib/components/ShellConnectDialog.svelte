@@ -1,16 +1,16 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
-  import type { ShellConnectOptions, Host, Group, SaveHostInput } from "../bridge";
+  import type { ShellConnectOptions, SavedSession, Group, SaveSessionInput } from "../bridge";
 
-  /** When set, prefills the form from an existing saved host and treats
-   * submit as an edit (saveHost overwrites it in place) rather than a new
+  /** When set, prefills the form from an existing saved session and treats
+   * submit as an edit (saveSession overwrites it in place) rather than a new
    * save. Shell presets carry no credential, so there's nothing to retype. */
-  export let editHost: Host | null = null;
+  export let editSession: SavedSession | null = null;
   export let groups: Group[] = [];
 
   const dispatch = createEventDispatcher<{
-    connect: { options: ShellConnectOptions; save: SaveHostInput | null };
-    save: SaveHostInput;
+    connect: { options: ShellConnectOptions; save: SaveSessionInput | null };
+    save: SaveSessionInput;
     cancel: void;
   }>();
 
@@ -20,14 +20,14 @@
   let groupId = "";
   let panelEl: HTMLDivElement;
 
-  $: isEditing = !!editHost;
+  $: isEditing = !!editSession;
 
   onMount(() => {
-    if (!editHost) return;
-    shellCommand = editHost.shellCommand ?? "";
-    workingDir = editHost.workingDir ?? "";
-    saveName = editHost.name;
-    groupId = editHost.groupId ?? "";
+    if (!editSession) return;
+    shellCommand = editSession.shellCommand ?? "";
+    workingDir = editSession.workingDir ?? "";
+    saveName = editSession.name;
+    groupId = editSession.groupId ?? "";
   });
 
   // Both fields are optional (blank = use the system default), so there's
@@ -35,18 +35,19 @@
   $: canConnect = true;
   $: canSave = saveName.trim().length > 0;
 
-  function buildSaveInput(): SaveHostInput {
-    // Generated client-side (rather than left for save_host to fill in)
-    // so the caller knows the real host id immediately, synchronously —
-    // needed to open the tab with the right id for scrollback keying
-    // without waiting on the save round-trip first.
+  function buildSaveInput(): SaveSessionInput {
+    // Generated client-side (rather than left for save_session to fill in)
+    // so the caller knows the real saved-session id immediately,
+    // synchronously — needed to open the tab with the right id for
+    // scrollback keying without waiting on the save round-trip first.
     return {
-      id: editHost?.id ?? crypto.randomUUID(),
+      id: editSession?.id ?? crypto.randomUUID(),
       name: saveName.trim(),
       groupId: groupId || null,
       protocol: "shell",
-      // Not meaningful for shell, but Host.address is required — shown in
-      // the sidebar's meta line, so this doubles as the display summary.
+      // Not meaningful for shell, but SavedSession.address is required —
+      // shown in the sidebar's meta line, so this doubles as the display
+      // summary.
       address: shellCommand.trim() || "$SHELL",
       auth: { type: "none" },
       shellCommand: shellCommand.trim() || null,
@@ -89,8 +90,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" on:mousedown={handleOutsideClick}>
-  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit terminal preset" : "New terminal preset"}>
-    <h2 class="title">{isEditing ? "Edit terminal preset" : "New terminal preset"}</h2>
+  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit local shell preset" : "New local shell preset"}>
+    <h2 class="title">{isEditing ? "Edit local shell preset" : "New local shell preset"}</h2>
 
     <label class="field">
       <span>Shell command (optional)</span>

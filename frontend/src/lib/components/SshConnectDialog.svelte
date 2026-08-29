@@ -1,19 +1,19 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
-  import type { SshConnectOptions, AuthInput, Host, Group, SaveHostInput } from "../bridge";
-  import { resolveHostSecret } from "../bridge";
+  import type { SshConnectOptions, AuthInput, SavedSession, Group, SaveSessionInput } from "../bridge";
+  import { resolveSessionSecret } from "../bridge";
 
-  /** When set, prefills the form from an existing saved host and treats
-   * submit as an edit (saveHost overwrites it in place) rather than a new
+  /** When set, prefills the form from an existing saved session and treats
+   * submit as an edit (saveSession overwrites it in place) rather than a new
    * save. Password auth can be left blank to keep the stored password
    * without retyping it — private-key path/passphrase are always sent as
-   * typed, same as creating a new host. */
-  export let editHost: Host | null = null;
+   * typed, same as creating a new session. */
+  export let editSession: SavedSession | null = null;
   export let groups: Group[] = [];
 
   const dispatch = createEventDispatcher<{
-    connect: { options: SshConnectOptions; save: SaveHostInput | null };
-    save: SaveHostInput;
+    connect: { options: SshConnectOptions; save: SaveSessionInput | null };
+    save: SaveSessionInput;
     cancel: void;
   }>();
 
@@ -29,23 +29,23 @@
 
   let panelEl: HTMLDivElement;
 
-  $: isEditing = !!editHost;
-  // Blank password only means "keep the stored one" when the host was
+  $: isEditing = !!editSession;
+  // Blank password only means "keep the stored one" when the session was
   // already password-authed — switching tabs while editing means there's
   // nothing old to fall back to, so a real value is required either way.
-  $: originalIsPassword = isEditing && editHost?.auth.type === "password";
+  $: originalIsPassword = isEditing && editSession?.auth.type === "password";
   $: passwordUnchanged = originalIsPassword && authMethod === "password" && password.length === 0;
 
   onMount(() => {
-    if (!editHost) return;
-    host = editHost.address;
-    port = editHost.port ?? 22;
-    username = editHost.username ?? "";
-    saveName = editHost.name;
-    groupId = editHost.groupId ?? "";
-    if (editHost.auth.type === "privateKey") {
+    if (!editSession) return;
+    host = editSession.address;
+    port = editSession.port ?? 22;
+    username = editSession.username ?? "";
+    saveName = editSession.name;
+    groupId = editSession.groupId ?? "";
+    if (editSession.auth.type === "privateKey") {
       authMethod = "privateKey";
-      keyPath = editHost.auth.path ?? "";
+      keyPath = editSession.auth.path ?? "";
     } else {
       authMethod = "password";
     }
@@ -67,9 +67,9 @@
     return { type: "privateKey", path: keyPath.trim(), passphrase: passphrase || null };
   }
 
-  function buildSaveInput(authInput: AuthInput): SaveHostInput {
+  function buildSaveInput(authInput: AuthInput): SaveSessionInput {
     return {
-      id: editHost?.id,
+      id: editSession?.id,
       name: saveName.trim(),
       groupId: groupId || null,
       protocol: "ssh",
@@ -84,8 +84,8 @@
     if (!canConnect) return;
     const authInput = buildAuthInput();
     let connectAuth: SshConnectOptions["auth"];
-    if (authInput.type === "unchanged" && editHost) {
-      const secret = await resolveHostSecret(editHost.id).catch(() => null);
+    if (authInput.type === "unchanged" && editSession) {
+      const secret = await resolveSessionSecret(editSession.id).catch(() => null);
       connectAuth = { type: "password", password: secret ?? "" };
     } else if (authMethod === "password") {
       connectAuth = { type: "password", password };
@@ -125,8 +125,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" on:mousedown={handleOutsideClick}>
-  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit SSH connection" : "New SSH connection"}>
-    <h2 class="title">{isEditing ? "Edit SSH connection" : "New SSH connection"}</h2>
+  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit SSH session" : "New SSH session"}>
+    <h2 class="title">{isEditing ? "Edit SSH session" : "New SSH session"}</h2>
 
     <div class="row split">
       <label class="field grow">

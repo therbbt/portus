@@ -16,7 +16,7 @@ pub enum KeychainError {
 
 /// Generates a fresh opaque handle and stores `secret` under it. The
 /// returned handle is what gets written into an `AuthMethod` variant on
-/// [`crate::config::Host::auth`].
+/// [`crate::config::SavedSession::auth`].
 pub fn store(secret: &str) -> Result<String, KeychainError> {
     let handle = Uuid::new_v4().to_string();
     let entry = keyring::Entry::new(SERVICE, &handle)?;

@@ -49,8 +49,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" on:mousedown={handleOutsideClick}>
-  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label="New RDP connection">
-    <h2 class="title">New RDP connection</h2>
+  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label="New RDP session">
+    <h2 class="title">New RDP session</h2>
 
     <div class="row split">
       <label class="field grow">
