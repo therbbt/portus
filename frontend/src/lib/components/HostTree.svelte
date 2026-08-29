@@ -179,30 +179,6 @@
               {group.name}
             </span>
           {/if}
-          <span
-            class="row-action"
-            role="button"
-            tabindex="0"
-            aria-label={`Rename ${group.name}`}
-            title={`Rename ${group.name}`}
-            on:click|stopPropagation={() => startRenameFolder(group)}
-            on:keydown|stopPropagation={(e) => e.key === "Enter" && startRenameFolder(group)}
-          >
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 2l3 3-8 8-3.5.5.5-3.5z" />
-            </svg>
-          </span>
-          <span
-            class="row-action"
-            role="button"
-            tabindex="0"
-            aria-label={`Delete ${group.name}`}
-            title={`Delete ${group.name} (hosts inside move to the root)`}
-            on:click|stopPropagation={() => dispatch("deleteFolder", group)}
-            on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteFolder", group)}
-          >
-            ×
-          </span>
         </li>
         {#if !group.collapsed}
           {#each hostsIn(group.id, hosts) as host (host.id)}
@@ -411,22 +387,20 @@
     border-radius: var(--radius-sm);
     line-height: 1;
   }
-  .host-row:hover .row-action,
-  .folder-row:hover .row-action {
+  .host-row:hover .row-action {
     opacity: 1;
   }
   .row-action:hover {
     color: var(--fg-primary);
     background: var(--surface-4);
   }
-  /* The chevron/name/action controls on a folder row are click targets,
-     not text inputs — the global accent focus ring (tokens.css's
-     *:focus-visible) reads as an unexpected flash of green on a click
-     here rather than useful keyboard-nav feedback. The rename input right
-     below keeps its own ring since typing feedback there IS useful. */
+  /* The chevron/name controls on a folder row are click targets, not text
+     inputs — the global accent focus ring (tokens.css's *:focus-visible)
+     reads as an unexpected flash of green on a click here rather than
+     useful keyboard-nav feedback. The rename input right below keeps its
+     own ring since typing feedback there IS useful. */
   .folder-row .chevron-btn:focus-visible,
-  .folder-row .folder-name:focus-visible,
-  .folder-row .row-action:focus-visible {
+  .folder-row .folder-name:focus-visible {
     outline: none;
     box-shadow: none;
   }
