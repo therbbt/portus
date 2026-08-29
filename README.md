@@ -20,11 +20,11 @@ than a heavyweight IDE.
   panel next to the terminal.
 - **RDP** (IronRDP) — connects and renders the remote framebuffer; currently
   view-only, no keyboard/mouse input forwarding yet.
-- **Saved hosts**: save a connection's address/credentials from any connect
-  dialog, reconnect with one click from the sidebar, and edit a saved
-  host's details later without retyping its password (only its handle is
-  kept in the OS keychain — password/passphrase can be left blank on edit
-  to keep the stored value).
+- **Saved sessions**: save a connection's address/credentials from any
+  connect dialog, reconnect with one click from the sidebar, and edit a
+  saved session's details later without retyping its password (only its
+  handle is kept in the OS keychain — password/passphrase can be left blank
+  on edit to keep the stored value).
 - **Settings** for the terminal's font family, size, and per-machine ANSI
   color palette — applied live to every open terminal, not just new ones.
 - A window, sidebar, and unified action bar styled to match FlashPad, a

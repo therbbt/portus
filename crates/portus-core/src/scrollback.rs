@@ -1,8 +1,8 @@
-//! Disk-backed scrollback for saved hosts — currently only wired up for
+//! Disk-backed scrollback for saved sessions — currently only wired up for
 //! local-shell presets (see `app/portus/src/adapter.rs`), but keyed
-//! generically by host id so any protocol could opt in later.
+//! generically by saved session id so any protocol could opt in later.
 //!
-//! Each host gets its own capped file at `<config_dir>/scrollback/<id>.log`
+//! Each saved session gets its own capped file at `<config_dir>/scrollback/<id>.log`
 //! holding the raw output bytes (ANSI sequences included) most recently
 //! written to its terminal. On reconnect, `read_tail` hands those bytes
 //! back so the frontend can replay them into a fresh xterm.js instance
@@ -31,18 +31,18 @@ const MAX_BYTES: u64 = 256 * 1024;
 /// per-write one.
 const TRUNCATE_THRESHOLD: u64 = MAX_BYTES + MAX_BYTES / 2;
 
-fn scrollback_path(host_id: Uuid) -> io::Result<PathBuf> {
+fn scrollback_path(saved_session_id: Uuid) -> io::Result<PathBuf> {
     let dir = config_dir()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
         .join("scrollback");
-    Ok(dir.join(format!("{host_id}.log")))
+    Ok(dir.join(format!("{saved_session_id}.log")))
 }
 
-/// Appends freshly-arrived output bytes for `host_id`'s scrollback,
+/// Appends freshly-arrived output bytes for `saved_session_id`'s scrollback,
 /// truncating the file back to `MAX_BYTES` (keeping the tail) if it's
 /// grown well past that.
-pub fn append(host_id: Uuid, data: &[u8]) -> io::Result<()> {
-    let path = scrollback_path(host_id)?;
+pub fn append(saved_session_id: Uuid, data: &[u8]) -> io::Result<()> {
+    let path = scrollback_path(saved_session_id)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -60,20 +60,21 @@ pub fn append(host_id: Uuid, data: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// The full saved scrollback for `host_id`, or an empty vec if it has none
-/// yet (first connect, or scrollback was cleared).
-pub fn read_tail(host_id: Uuid) -> io::Result<Vec<u8>> {
-    match std::fs::read(scrollback_path(host_id)?) {
+/// The full saved scrollback for `saved_session_id`, or an empty vec if it
+/// has none yet (first connect, or scrollback was cleared).
+pub fn read_tail(saved_session_id: Uuid) -> io::Result<Vec<u8>> {
+    match std::fs::read(scrollback_path(saved_session_id)?) {
         Ok(bytes) => Ok(bytes),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(e),
     }
 }
 
-/// Removes a host's scrollback file entirely — called when the host itself
-/// is deleted, so it doesn't leave an orphaned file behind.
-pub fn clear(host_id: Uuid) -> io::Result<()> {
-    match std::fs::remove_file(scrollback_path(host_id)?) {
+/// Removes a saved session's scrollback file entirely — called when the
+/// saved session itself is deleted, so it doesn't leave an orphaned file
+/// behind.
+pub fn clear(saved_session_id: Uuid) -> io::Result<()> {
+    match std::fs::remove_file(scrollback_path(saved_session_id)?) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),

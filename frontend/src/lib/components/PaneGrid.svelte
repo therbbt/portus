@@ -77,7 +77,7 @@
             <Terminal
               protocol={pane.protocol}
               options={pane.options}
-              hostId={pane.hostId}
+              savedSessionId={pane.savedSessionId}
               {active}
               on:state={(e) => onPaneState(paneId, e.detail)}
               on:title={(e) => onPaneTitle(paneId, e.detail.title)}

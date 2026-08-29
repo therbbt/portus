@@ -10,7 +10,7 @@ use crate::session::Protocol;
 /// Bump this whenever the on-disk shape of [`Config`] changes, and add a
 /// migration arm in [`migrate`]. The file is hand-editable, so migrations
 /// must be forgiving of missing fields rather than rejecting the file.
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,7 +19,7 @@ pub struct Config {
     #[serde(default)]
     pub groups: Vec<Group>,
     #[serde(default)]
-    pub hosts: Vec<Host>,
+    pub sessions: Vec<SavedSession>,
     #[serde(default)]
     pub settings: Settings,
 }
@@ -29,7 +29,7 @@ impl Default for Config {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
             groups: Vec::new(),
-            hosts: Vec::new(),
+            sessions: Vec::new(),
             settings: Settings::default(),
         }
     }
@@ -46,9 +46,14 @@ pub struct Group {
     pub collapsed: bool,
 }
 
+/// A saved, reusable session profile — an SSH/RDP/serial target or a local
+/// shell preset that the user has given a name and (for network protocols)
+/// stored credentials for, distinct from the ephemeral, unnamed
+/// [`crate::session::Session`] a protocol crate spins up when a tab actually
+/// connects.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Host {
+pub struct SavedSession {
     pub id: Uuid,
     pub name: String,
     #[serde(default)]
@@ -103,7 +108,7 @@ pub enum AuthMethod {
 impl AuthMethod {
     /// The keychain handle this variant stores, if any — used to resolve
     /// the actual secret on connect, and to clean up the keychain entry
-    /// when the host is deleted.
+    /// when the saved session is deleted.
     pub fn credential_handle(&self) -> Option<&str> {
         match self {
             AuthMethod::None => None,
@@ -250,8 +255,20 @@ fn migrate(mut value: serde_json::Value) -> Result<serde_json::Value, ConfigErro
     // `AuthMethod::None`, and the field being dropped, so any old
     // `credential_handle` on the value is silently ignored by serde.
 
+    // v2 -> v3: `Config.hosts` was renamed to `Config.sessions` (the `Host`
+    // type itself became `SavedSession`) as part of unifying every
+    // connection kind under one "session" concept. Same JSON shape, just a
+    // renamed top-level key.
+    if version < 3 {
+        if let Some(obj) = value.as_object_mut() {
+            if let Some(hosts) = obj.remove("hosts") {
+                obj.insert("sessions".to_string(), hosts);
+            }
+        }
+    }
+
     // Future migrations go here, e.g.:
-    // if version < 3 { /* rewrite `value` in place */ }
+    // if version < 4 { /* rewrite `value` in place */ }
 
     if let Some(obj) = value.as_object_mut() {
         obj.insert(

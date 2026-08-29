@@ -3,7 +3,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
-use portus_core::config::{AuthMethod, Config, Group, Host};
+use portus_core::config::{AuthMethod, Config, Group, SavedSession};
 use portus_core::session::Protocol;
 use portus_rdp::{RdpConnectOptions, RdpEvent};
 use portus_sftp::DirEntry;
@@ -17,15 +17,15 @@ use crate::sftp_state::SftpState;
 pub fn session_open(
     protocol: String,
     options: Option<serde_json::Value>,
-    // Set when this tab is a saved host's session, not an ad-hoc one — the
+    // Set when this tab is opening a saved session, not an ad-hoc one — the
     // only thing it currently unlocks is scrollback persistence for saved
     // shell presets (see portus_core::scrollback), since an ad-hoc tab has
     // no stable identity to persist scrollback under anyway.
-    host_id: Option<Uuid>,
+    saved_session_id: Option<Uuid>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    state.open(&protocol, options.unwrap_or(serde_json::Value::Null), host_id, app)
+    state.open(&protocol, options.unwrap_or(serde_json::Value::Null), saved_session_id, app)
 }
 
 #[tauri::command]
@@ -58,18 +58,18 @@ pub fn list_serial_ports() -> Vec<String> {
     portus_serial::list_ports()
 }
 
-/// What the frontend sends for the auth half of a host it wants saved —
+/// What the frontend sends for the auth half of a session it wants saved —
 /// distinct from [`AuthMethod`] because it carries the raw secret rather
-/// than a keychain handle. `save_host` is the only place that resolves one
-/// into the other.
+/// than a keychain handle. `save_session` is the only place that resolves
+/// one into the other.
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AuthInput {
     None,
-    /// Reuse whatever the host being edited already has stored — an edit
+    /// Reuse whatever the session being edited already has stored — an edit
     /// dialog sends this when its credential field was left blank, so a
     /// hostname/username fix doesn't force retyping the password.
-    /// Meaningless (falls back to `None`) when saving a brand-new host.
+    /// Meaningless (falls back to `None`) when saving a brand-new session.
     Unchanged,
     Password { password: String },
     PrivateKey { path: String, passphrase: Option<String> },
@@ -93,12 +93,12 @@ fn resolve_auth(auth: AuthInput, existing: Option<&AuthMethod>) -> Result<AuthMe
     }
 }
 
-/// Creates or fully replaces a saved host. `auth` is usually a fresh secret
-/// to resolve into a new keychain entry, but can also be `Unchanged` to
-/// reuse the edited host's existing credential as-is.
+/// Creates or fully replaces a saved session. `auth` is usually a fresh
+/// secret to resolve into a new keychain entry, but can also be `Unchanged`
+/// to reuse the edited session's existing credential as-is.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub fn save_host(
+pub fn save_session(
     id: Option<Uuid>,
     name: String,
     group_id: Option<Uuid>,
@@ -114,11 +114,11 @@ pub fn save_host(
     let id = id.unwrap_or_else(Uuid::new_v4);
     let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
 
-    let existing_auth = config.hosts.iter().find(|h| h.id == id).map(|h| h.auth.clone());
+    let existing_auth = config.sessions.iter().find(|s| s.id == id).map(|s| s.auth.clone());
     let old_handle = existing_auth.as_ref().and_then(|a| a.credential_handle()).map(str::to_string);
     let resolved_auth = resolve_auth(auth, existing_auth.as_ref())?;
 
-    // Replacing a host's secret orphans its old keychain entry unless we
+    // Replacing a session's secret orphans its old keychain entry unless we
     // clean it up ourselves — but not when `Unchanged` just reused it.
     if let Some(old) = &old_handle {
         if resolved_auth.credential_handle() != Some(old.as_str()) {
@@ -126,7 +126,7 @@ pub fn save_host(
         }
     }
 
-    let host = Host {
+    let saved_session = SavedSession {
         id,
         name,
         group_id,
@@ -140,10 +140,10 @@ pub fn save_host(
         working_dir,
     };
 
-    if let Some(existing) = config.hosts.iter_mut().find(|h| h.id == id) {
-        *existing = host;
+    if let Some(existing) = config.sessions.iter_mut().find(|s| s.id == id) {
+        *existing = saved_session;
     } else {
-        config.hosts.push(host);
+        config.sessions.push(saved_session);
     }
 
     portus_core::config::save(&config).map_err(|e| e.to_string())?;
@@ -151,36 +151,37 @@ pub fn save_host(
 }
 
 #[tauri::command]
-pub fn delete_host(host_id: Uuid) -> Result<Config, String> {
+pub fn delete_session(saved_session_id: Uuid) -> Result<Config, String> {
     let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
-    if let Some(pos) = config.hosts.iter().position(|h| h.id == host_id) {
-        let removed = config.hosts.remove(pos);
+    if let Some(pos) = config.sessions.iter().position(|s| s.id == saved_session_id) {
+        let removed = config.sessions.remove(pos);
         if let Some(handle) = removed.auth.credential_handle() {
             let _ = portus_core::keychain::delete(handle);
         }
-        let _ = portus_core::scrollback::clear(host_id);
+        let _ = portus_core::scrollback::clear(saved_session_id);
     }
     portus_core::config::save(&config).map_err(|e| e.to_string())?;
     Ok(config)
 }
 
-/// Resolves a saved host's stored secret (password or key passphrase) from
-/// the keychain, for the frontend to fold into the connect options it
-/// sends to `session_open`. `None` if the host has no stored credential.
+/// Resolves a saved session's stored secret (password or key passphrase)
+/// from the keychain, for the frontend to fold into the connect options it
+/// sends to `session_open`. `None` if the session has no stored credential.
 #[tauri::command]
-pub fn resolve_host_secret(host_id: Uuid) -> Result<Option<String>, String> {
+pub fn resolve_session_secret(saved_session_id: Uuid) -> Result<Option<String>, String> {
     let config = portus_core::config::load().map_err(|e| e.to_string())?;
-    let host = config.hosts.iter().find(|h| h.id == host_id).ok_or("host not found")?;
-    match host.auth.credential_handle() {
+    let saved_session = config.sessions.iter().find(|s| s.id == saved_session_id).ok_or("saved session not found")?;
+    match saved_session.auth.credential_handle() {
         Some(handle) => portus_core::keychain::retrieve(handle).map(Some).map_err(|e| e.to_string()),
         None => Ok(None),
     }
 }
 
 // --- Groups --------------------------------------------------------------
-// Folders in the sidebar. A host's group_id (or a subgroup's parent_id)
-// pointing at a deleted group is never left dangling — delete_group always
-// un-parents whatever it contained rather than cascading.
+// Folders in the sidebar. A saved session's group_id (or a subgroup's
+// parent_id) pointing at a deleted group is never left dangling —
+// delete_group always un-parents whatever it contained rather than
+// cascading.
 
 /// Creates or renames/reparents a saved folder.
 #[tauri::command]
@@ -203,9 +204,9 @@ pub fn save_group(id: Option<Uuid>, name: String, parent_id: Option<Uuid>) -> Re
 pub fn delete_group(group_id: Uuid) -> Result<Config, String> {
     let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
     config.groups.retain(|g| g.id != group_id);
-    for host in config.hosts.iter_mut() {
-        if host.group_id == Some(group_id) {
-            host.group_id = None;
+    for saved_session in config.sessions.iter_mut() {
+        if saved_session.group_id == Some(group_id) {
+            saved_session.group_id = None;
         }
     }
     for group in config.groups.iter_mut() {
