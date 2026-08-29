@@ -47,7 +47,7 @@
 
 <svelte:window on:mousedown={open ? handleOutsideClick : undefined} on:keydown={open ? handleKeydown : undefined} />
 
-<button class="toolbar-btn" class:active={open} bind:this={buttonEl} on:click={toggle} aria-label="New connection">
+<button class="toolbar-btn" class:active={open} bind:this={buttonEl} on:click={toggle} aria-label="New session">
   <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <path d="M8 3v10M3 8h10" />
   </svg>
@@ -59,11 +59,11 @@
 
 {#if open}
   <div class="menu" bind:this={menuEl} style="left: {menuX}px; top: {menuY}px;" role="menu">
-    <button class="item" role="menuitem" on:click={() => pick("newSsh")}>SSH connection</button>
-    <button class="item" role="menuitem" on:click={() => pick("newRdp")}>RDP connection</button>
-    <button class="item" role="menuitem" on:click={() => pick("newSerial")}>Serial connection</button>
+    <button class="item" role="menuitem" on:click={() => pick("newSsh")}>SSH session</button>
+    <button class="item" role="menuitem" on:click={() => pick("newRdp")}>RDP session</button>
+    <button class="item" role="menuitem" on:click={() => pick("newSerial")}>Serial session</button>
     <button class="item" role="menuitem" on:click={() => pick("newShell")}>Local shell</button>
-    <button class="item" role="menuitem" on:click={() => pick("newShellPreset")}>Terminal preset…</button>
+    <button class="item" role="menuitem" on:click={() => pick("newShellPreset")}>Local shell preset…</button>
   </div>
 {/if}
 

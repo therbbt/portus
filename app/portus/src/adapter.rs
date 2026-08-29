@@ -29,14 +29,14 @@ impl AppState {
     /// return the id the frontend will use to address it from now on.
     /// `options` carries protocol-specific connect parameters (e.g. host/
     /// auth for SSH) as JSON — this function is the only place that knows
-    /// how to turn that JSON into a concrete `Session`. `host_id` is set
-    /// only for a saved host's session, and only actually used for a saved
-    /// shell preset (scrollback persistence) — see `run_session`.
+    /// how to turn that JSON into a concrete `Session`. `saved_session_id`
+    /// is set only when opening a saved session, and only actually used for
+    /// a saved shell preset (scrollback persistence) — see `run_session`.
     pub fn open(
         &self,
         protocol: &str,
         options: serde_json::Value,
-        host_id: Option<Uuid>,
+        saved_session_id: Option<Uuid>,
         app: AppHandle,
     ) -> Result<String, String> {
         let session: Box<dyn Session> = match protocol {
@@ -64,7 +64,7 @@ impl AppState {
         // Ad-hoc "Local shell" tabs have no stable identity to persist
         // scrollback under, and every other protocol hasn't opted in yet —
         // scoped to saved shell presets specifically for now.
-        let scrollback_host_id = if protocol == "shell" { host_id } else { None };
+        let scrollback_saved_session_id = if protocol == "shell" { saved_session_id } else { None };
 
         let id = Uuid::new_v4().to_string();
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
@@ -73,7 +73,7 @@ impl AppState {
         let sessions = self.sessions.clone();
         let task_id = id.clone();
         tauri::async_runtime::spawn(async move {
-            run_session(session, cmd_rx, &app, &task_id, scrollback_host_id).await;
+            run_session(session, cmd_rx, &app, &task_id, scrollback_saved_session_id).await;
             sessions.lock().unwrap().remove(&task_id);
         });
 
@@ -92,7 +92,7 @@ async fn run_session(
     mut cmd_rx: mpsc::UnboundedReceiver<SessionCommand>,
     app: &AppHandle,
     id: &str,
-    scrollback_host_id: Option<Uuid>,
+    scrollback_saved_session_id: Option<Uuid>,
 ) {
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     if let Err(e) = session.start(event_tx).await {
@@ -104,14 +104,14 @@ async fn run_session(
     // Replay whatever was captured last time, before any live output, so it
     // reads as "the terminal picks up where it left off" rather than a
     // separate, clearly-stale block of text.
-    if let Some(host_id) = scrollback_host_id {
-        match tokio::task::spawn_blocking(move || portus_core::scrollback::read_tail(host_id)).await {
+    if let Some(saved_session_id) = scrollback_saved_session_id {
+        match tokio::task::spawn_blocking(move || portus_core::scrollback::read_tail(saved_session_id)).await {
             Ok(Ok(bytes)) if !bytes.is_empty() => {
                 emit(app, id, &SessionEvent::Data { data: Bytes::from(bytes) });
             }
             Ok(Ok(_)) => {}
-            Ok(Err(e)) => tracing::warn!("failed to read scrollback for {host_id}: {e}"),
-            Err(e) => tracing::warn!("scrollback read task panicked for {host_id}: {e}"),
+            Ok(Err(e)) => tracing::warn!("failed to read scrollback for {saved_session_id}: {e}"),
+            Err(e) => tracing::warn!("scrollback read task panicked for {saved_session_id}: {e}"),
         }
     }
 
@@ -138,14 +138,14 @@ async fn run_session(
             event = event_rx.recv() => {
                 match event {
                     Some(event) => {
-                        if let (Some(host_id), SessionEvent::Data { data }) = (scrollback_host_id, &event) {
+                        if let (Some(saved_session_id), SessionEvent::Data { data }) = (scrollback_saved_session_id, &event) {
                             // Detached (not awaited here) so a disk write never adds
                             // latency to the live data path the terminal is waiting on.
                             let data = data.clone();
                             tokio::task::spawn(async move {
-                                match tokio::task::spawn_blocking(move || portus_core::scrollback::append(host_id, &data)).await {
-                                    Ok(Err(e)) => tracing::warn!("failed to append scrollback for {host_id}: {e}"),
-                                    Err(e) => tracing::warn!("scrollback append task panicked for {host_id}: {e}"),
+                                match tokio::task::spawn_blocking(move || portus_core::scrollback::append(saved_session_id, &data)).await {
+                                    Ok(Err(e)) => tracing::warn!("failed to append scrollback for {saved_session_id}: {e}"),
+                                    Err(e) => tracing::warn!("scrollback append task panicked for {saved_session_id}: {e}"),
                                     Ok(Ok(())) => {}
                                 }
                             });

@@ -20,8 +20,8 @@
   export let protocol: Protocol = "shell";
   export let options: SessionOptions = undefined;
   export let active = true;
-  /** Set only when this tab was opened from a saved host — see openSession. */
-  export let hostId: string | undefined = undefined;
+  /** Set only when this tab was opened from a saved session — see openSession. */
+  export let savedSessionId: string | undefined = undefined;
 
   const dispatch = createEventDispatcher<{
     state: SessionState;
@@ -158,7 +158,7 @@
     term.open(container);
     fitAddon.fit();
 
-    sessionId = await openSession(protocol, options, hostId);
+    sessionId = await openSession(protocol, options, savedSessionId);
     dispatch("ready", { sessionId });
 
     sub = await subscribeSession(sessionId, handleEvent);
