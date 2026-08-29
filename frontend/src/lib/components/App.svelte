@@ -13,6 +13,7 @@
   import RdpConnectDialog from "./RdpConnectDialog.svelte";
   import SftpPanel from "./SftpPanel.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
+  import ShortcutsPanel from "./ShortcutsPanel.svelte";
   import NewConnectionMenu from "./NewConnectionMenu.svelte";
   import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
   import type {
@@ -72,6 +73,7 @@
   let showRdpDialog = false;
   let showSftpPanel = false;
   let showSettingsPanel = false;
+  let showShortcutsPanel = false;
   let contextMenu: { x: number; y: number; items: ContextMenuItem[] } | null = null;
   let hosts: Host[] = [];
   let groups: Group[] = [];
@@ -468,7 +470,13 @@
 
 <div class="app-shell">
   <ResizeHandles />
-  <TitleBar />
+  <TitleBar
+    splitDisabled={!activeTab}
+    on:splitRow={() => splitActivePane("row")}
+    on:splitColumn={() => splitActivePane("column")}
+    on:showShortcuts={() => (showShortcutsPanel = true)}
+    on:showSettings={openSettingsPanel}
+  />
   <div class="action-bar">
     <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
       <NewConnectionMenu
@@ -491,36 +499,6 @@
       {#if activePane?.protocol === "ssh"}
         <button class="files-btn" class:active={showSftpPanel} on:click={toggleSftpPanel}>Files</button>
       {/if}
-      <button
-        class="split-btn"
-        aria-label="Split right"
-        title="Split right (Ctrl+Shift+D)"
-        disabled={!activeTab}
-        on:click={() => splitActivePane("row")}
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
-          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-          <line x1="8" y1="2.5" x2="8" y2="13.5" />
-        </svg>
-      </button>
-      <button
-        class="split-btn"
-        aria-label="Split down"
-        title="Split down (Ctrl+Shift+E)"
-        disabled={!activeTab}
-        on:click={() => splitActivePane("column")}
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
-          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-          <line x1="1.5" y1="8" x2="14.5" y2="8" />
-        </svg>
-      </button>
-      <button class="settings-btn" aria-label="Settings" title="Settings" on:click={openSettingsPanel}>
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="8" cy="8" r="2.2" />
-          <path d="M8 2v1.6M8 12.4V14M14 8h-1.6M3.6 8H2M12.13 3.87l-1.13 1.13M4.99 11.01l-1.13 1.13M12.13 12.13l-1.13-1.13M4.99 4.99 3.87 3.87" />
-        </svg>
-      </button>
     </div>
   </div>
   <div class="body">
@@ -624,6 +602,9 @@
       on:cancel={() => (showSettingsPanel = false)}
     />
   {/if}
+  {#if showShortcutsPanel}
+    <ShortcutsPanel on:cancel={() => (showShortcutsPanel = false)} />
+  {/if}
   {#if contextMenu}
     <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => (contextMenu = null)} />
   {/if}
@@ -703,31 +684,6 @@
     background: var(--accent);
     color: var(--accent-fg);
     font-weight: 600;
-  }
-  .split-btn,
-  .settings-btn {
-    flex-shrink: 0;
-    align-self: center;
-    margin-right: var(--space-2);
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    color: var(--fg-tertiary);
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-  }
-  .split-btn:hover,
-  .settings-btn:hover {
-    background: var(--surface-3);
-    color: var(--fg-primary);
-  }
-  .split-btn:disabled {
-    color: var(--fg-disabled);
-    cursor: not-allowed;
   }
   .session-area {
     flex: 1;
