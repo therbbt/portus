@@ -77,7 +77,7 @@
 {/if}
 
 <style>
-  /* Matches FlashPad's ActionToolbar .toolbar-btn (see NewConnectionMenu.svelte
+  /* Matches FlashPad's ActionToolbar .toolbar-btn (see NewSessionMenu.svelte
      for the same pattern applied to the sidebar's "New" button). */
   .toolbar-btn {
     flex-shrink: 0;

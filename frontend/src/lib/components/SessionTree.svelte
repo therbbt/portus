@@ -2,16 +2,16 @@
   import { createEventDispatcher } from "svelte";
   import RingMark from "./RingMark.svelte";
   import type { ContextMenuItem } from "./ContextMenu.svelte";
-  import type { Host, Group } from "../bridge";
+  import type { SavedSession, Group } from "../bridge";
 
-  export let hosts: Host[] = [];
+  export let sessions: SavedSession[] = [];
   export let groups: Group[] = [];
   export let width = 260;
 
   const dispatch = createEventDispatcher<{
-    connect: Host;
-    deleteHost: Host;
-    editHost: Host;
+    connect: SavedSession;
+    deleteSession: SavedSession;
+    editSession: SavedSession;
     toggleFolder: Group;
     createFolder: { name: string };
     renameFolder: { id: string; name: string };
@@ -22,9 +22,9 @@
     openContextMenu: { x: number; y: number; items: ContextMenuItem[] };
   }>();
 
-  // "echo" is a debug-only session kind, never a real saved host's
+  // "echo" is a debug-only session kind, never a real saved session's
   // protocol — included here only so this satisfies the shared `Protocol` type.
-  const protocolLabel: Record<Host["protocol"], string> = {
+  const protocolLabel: Record<SavedSession["protocol"], string> = {
     ssh: "SSH",
     serial: "Serial",
     shell: "Shell",
@@ -37,8 +37,8 @@
   // UI creates a nested one yet — only top-level folders are rendered, same
   // as FlashPad's folders-of-notes before you factor in sub-notes.
   $: rootGroups = groups.filter((g) => !g.parentId).sort((a, b) => a.name.localeCompare(b.name));
-  $: ungroupedHosts = hosts.filter((h) => !h.groupId);
-  const hostsIn = (groupId: string, allHosts: Host[]) => allHosts.filter((h) => h.groupId === groupId);
+  $: ungroupedSessions = sessions.filter((s) => !s.groupId);
+  const sessionsIn = (groupId: string, allSessions: SavedSession[]) => allSessions.filter((s) => s.groupId === groupId);
 
   let creatingFolder = false;
   let newFolderName = "";
@@ -108,14 +108,14 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <aside class="rail" style="width: {width}px; min-width: {width}px" on:contextmenu|preventDefault={openBackgroundMenu}>
-  {#if hosts.length === 0 && groups.length === 0 && !creatingFolder}
+  {#if sessions.length === 0 && groups.length === 0 && !creatingFolder}
     <div class="empty-state">
       <RingMark size={40} />
-      <p class="empty-title">No saved hosts yet</p>
+      <p class="empty-title">No saved sessions yet</p>
       <p class="empty-subtitle">Save a connection from the SSH or serial dialog and it'll show up here.</p>
     </div>
   {:else}
-    <ul class="host-list">
+    <ul class="session-list">
       {#if creatingFolder}
         <li class="folder-row">
           <span class="chevron-spacer"></span>
@@ -181,21 +181,21 @@
           {/if}
         </li>
         {#if !group.collapsed}
-          {#each hostsIn(group.id, hosts) as host (host.id)}
-            <li class="host-row nested">
-              <button class="host-main" on:click={() => dispatch("connect", host)}>
-                <span class="host-name">{host.name}</span>
-                <span class="host-meta">{protocolLabel[host.protocol]} · {host.address}</span>
+          {#each sessionsIn(group.id, sessions) as session (session.id)}
+            <li class="session-row nested">
+              <button class="session-main" on:click={() => dispatch("connect", session)}>
+                <span class="session-name">{session.name}</span>
+                <span class="session-meta">{protocolLabel[session.protocol]} · {session.address}</span>
               </button>
-              {#if host.protocol === "ssh" || host.protocol === "serial" || host.protocol === "shell"}
+              {#if session.protocol === "ssh" || session.protocol === "serial" || session.protocol === "shell"}
                 <span
                   class="row-action"
                   role="button"
                   tabindex="0"
-                  aria-label={`Edit ${host.name}`}
-                  title={`Edit ${host.name}`}
-                  on:click|stopPropagation={() => dispatch("editHost", host)}
-                  on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("editHost", host)}
+                  aria-label={`Edit ${session.name}`}
+                  title={`Edit ${session.name}`}
+                  on:click|stopPropagation={() => dispatch("editSession", session)}
+                  on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("editSession", session)}
                 >
                   <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M11 2l3 3-8 8-3.5.5.5-3.5z" />
@@ -206,10 +206,10 @@
                 class="row-action"
                 role="button"
                 tabindex="0"
-                aria-label={`Delete ${host.name}`}
-                title={`Delete ${host.name}`}
-                on:click|stopPropagation={() => dispatch("deleteHost", host)}
-                on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteHost", host)}
+                aria-label={`Delete ${session.name}`}
+                title={`Delete ${session.name}`}
+                on:click|stopPropagation={() => dispatch("deleteSession", session)}
+                on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteSession", session)}
               >
                 ×
               </span>
@@ -217,21 +217,21 @@
           {/each}
         {/if}
       {/each}
-      {#each ungroupedHosts as host (host.id)}
-        <li class="host-row">
-          <button class="host-main" on:click={() => dispatch("connect", host)}>
-            <span class="host-name">{host.name}</span>
-            <span class="host-meta">{protocolLabel[host.protocol]} · {host.address}</span>
+      {#each ungroupedSessions as session (session.id)}
+        <li class="session-row">
+          <button class="session-main" on:click={() => dispatch("connect", session)}>
+            <span class="session-name">{session.name}</span>
+            <span class="session-meta">{protocolLabel[session.protocol]} · {session.address}</span>
           </button>
-          {#if host.protocol === "ssh" || host.protocol === "serial" || host.protocol === "shell"}
+          {#if session.protocol === "ssh" || session.protocol === "serial" || session.protocol === "shell"}
             <span
               class="row-action"
               role="button"
               tabindex="0"
-              aria-label={`Edit ${host.name}`}
-              title={`Edit ${host.name}`}
-              on:click|stopPropagation={() => dispatch("editHost", host)}
-              on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("editHost", host)}
+              aria-label={`Edit ${session.name}`}
+              title={`Edit ${session.name}`}
+              on:click|stopPropagation={() => dispatch("editSession", session)}
+              on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("editSession", session)}
             >
               <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 2l3 3-8 8-3.5.5.5-3.5z" />
@@ -242,10 +242,10 @@
             class="row-action"
             role="button"
             tabindex="0"
-            aria-label={`Delete ${host.name}`}
-            title={`Delete ${host.name}`}
-            on:click|stopPropagation={() => dispatch("deleteHost", host)}
-            on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteHost", host)}
+            aria-label={`Delete ${session.name}`}
+            title={`Delete ${session.name}`}
+            on:click|stopPropagation={() => dispatch("deleteSession", session)}
+            on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteSession", session)}
           >
             ×
           </span>
@@ -285,7 +285,7 @@
     font-size: 12px;
     line-height: 1.5;
   }
-  .host-list {
+  .session-list {
     list-style: none;
     margin: 0;
     /* Top padding for breathing room now that the rail has no header of its
@@ -294,23 +294,23 @@
     overflow-y: auto;
     flex: 1;
   }
-  .host-row,
+  .session-row,
   .folder-row {
     display: flex;
     align-items: center;
     border-radius: var(--radius-sm);
   }
-  .host-row:hover,
+  .session-row:hover,
   .folder-row:hover {
     background: var(--surface-2);
   }
-  .host-row.nested {
+  .session-row.nested {
     /* Matches FlashPad's TreeNode indent step (depth * 14px, roughly 30px
        for a leaf one level in) rather than Portus's previous, noticeably
        shallower 1.1rem. */
     padding-left: 1.75rem;
   }
-  .host-main {
+  .session-main {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -323,13 +323,13 @@
     cursor: pointer;
     text-align: left;
   }
-  .host-name {
+  .session-name {
     font-size: 0.78rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .host-meta {
+  .session-meta {
     font-size: 0.66rem;
     color: var(--fg-tertiary);
     overflow: hidden;
@@ -387,7 +387,7 @@
     border-radius: var(--radius-sm);
     line-height: 1;
   }
-  .host-row:hover .row-action {
+  .session-row:hover .row-action {
     opacity: 1;
   }
   .row-action:hover {

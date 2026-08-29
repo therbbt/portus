@@ -1,17 +1,17 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
-  import type { SerialConnectOptions, Host, Group, SaveHostInput } from "../bridge";
+  import type { SerialConnectOptions, SavedSession, Group, SaveSessionInput } from "../bridge";
   import { listSerialPorts } from "../bridge";
 
-  /** When set, prefills the form from an existing saved host and treats
-   * submit as an edit (saveHost overwrites it in place) rather than a new
-   * save. Serial hosts carry no credential, so there's nothing to retype. */
-  export let editHost: Host | null = null;
+  /** When set, prefills the form from an existing saved session and treats
+   * submit as an edit (saveSession overwrites it in place) rather than a new
+   * save. Serial sessions carry no credential, so there's nothing to retype. */
+  export let editSession: SavedSession | null = null;
   export let groups: Group[] = [];
 
   const dispatch = createEventDispatcher<{
-    connect: { options: SerialConnectOptions; save: SaveHostInput | null };
-    save: SaveHostInput;
+    connect: { options: SerialConnectOptions; save: SaveSessionInput | null };
+    save: SaveSessionInput;
     cancel: void;
   }>();
 
@@ -24,14 +24,14 @@
   let groupId = "";
   let panelEl: HTMLDivElement;
 
-  $: isEditing = !!editHost;
+  $: isEditing = !!editSession;
 
   onMount(async () => {
-    if (editHost) {
-      portName = editHost.address;
-      baudRate = editHost.baudRate ?? 9600;
-      saveName = editHost.name;
-      groupId = editHost.groupId ?? "";
+    if (editSession) {
+      portName = editSession.address;
+      baudRate = editSession.baudRate ?? 9600;
+      saveName = editSession.name;
+      groupId = editSession.groupId ?? "";
     }
 
     try {
@@ -49,9 +49,9 @@
   $: canConnect = coreValid;
   $: canSave = coreValid && saveName.trim().length > 0;
 
-  function buildSaveInput(): SaveHostInput {
+  function buildSaveInput(): SaveSessionInput {
     return {
-      id: editHost?.id,
+      id: editSession?.id,
       name: saveName.trim(),
       groupId: groupId || null,
       protocol: "serial",
@@ -93,8 +93,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="overlay" on:mousedown={handleOutsideClick}>
-  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit serial connection" : "New serial connection"}>
-    <h2 class="title">{isEditing ? "Edit serial connection" : "New serial connection"}</h2>
+  <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit serial session" : "New serial session"}>
+    <h2 class="title">{isEditing ? "Edit serial session" : "New serial session"}</h2>
 
     <label class="field">
       <span>Port</span>
