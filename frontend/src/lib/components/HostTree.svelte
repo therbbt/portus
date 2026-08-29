@@ -119,9 +119,11 @@
       {#if creatingFolder}
         <li class="folder-row">
           <span class="chevron-spacer"></span>
-          <svg class="folder-icon" width="14" height="14" viewBox="0 0 16 16">
-            <path fill="currentColor" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.17a1.5 1.5 0 0 1 1.06.44l.83.82H13A1.5 1.5 0 0 1 14.5 4.26V12.5A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5V3Z" />
-          </svg>
+          <!-- No folder icon yet here — pairing that (fairly saturated
+               orange) icon with the input's own accent border made naming
+               a brand-new folder read as two strong colors firing at once.
+               The icon shows up once the folder actually exists (the
+               {#each rootGroups} row below this one). -->
           <input
             class="rename-input"
             bind:value={newFolderName}
@@ -150,7 +152,7 @@
               <path d="M3 1 L7 5 L3 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </span>
-          <svg class="folder-icon" width="14" height="14" viewBox="0 0 16 16">
+          <svg class="folder-icon" width="17" height="17" viewBox="0 0 16 16">
             <path fill="currentColor" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.17a1.5 1.5 0 0 1 1.06.44l.83.82H13A1.5 1.5 0 0 1 14.5 4.26V12.5A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5V3Z" />
           </svg>
           {#if renamingGroupId === group.id}
@@ -177,30 +179,6 @@
               {group.name}
             </span>
           {/if}
-          <span
-            class="row-action"
-            role="button"
-            tabindex="0"
-            aria-label={`Rename ${group.name}`}
-            title={`Rename ${group.name}`}
-            on:click|stopPropagation={() => startRenameFolder(group)}
-            on:keydown|stopPropagation={(e) => e.key === "Enter" && startRenameFolder(group)}
-          >
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 2l3 3-8 8-3.5.5.5-3.5z" />
-            </svg>
-          </span>
-          <span
-            class="row-action"
-            role="button"
-            tabindex="0"
-            aria-label={`Delete ${group.name}`}
-            title={`Delete ${group.name} (hosts inside move to the root)`}
-            on:click|stopPropagation={() => dispatch("deleteFolder", group)}
-            on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteFolder", group)}
-          >
-            ×
-          </span>
         </li>
         {#if !group.collapsed}
           {#each hostsIn(group.id, hosts) as host (host.id)}
@@ -324,10 +302,13 @@
   }
   .host-row:hover,
   .folder-row:hover {
-    background: var(--surface-3);
+    background: var(--surface-2);
   }
   .host-row.nested {
-    padding-left: 1.1rem;
+    /* Matches FlashPad's TreeNode indent step (depth * 14px, roughly 30px
+       for a leaf one level in) rather than Portus's previous, noticeably
+       shallower 1.1rem. */
+    padding-left: 1.75rem;
   }
   .host-main {
     flex: 1;
@@ -356,7 +337,7 @@
     white-space: nowrap;
   }
   .folder-row {
-    padding: 0.3rem 0.4rem;
+    padding: 0.22rem 0.4rem;
     gap: 0.35rem;
     cursor: pointer;
     user-select: none;
@@ -377,7 +358,7 @@
   }
   .chevron {
     flex-shrink: 0;
-    color: var(--fg-tertiary);
+    color: var(--fg-secondary);
     transition: transform 0.1s ease;
   }
   .chevron.open {
@@ -406,22 +387,20 @@
     border-radius: var(--radius-sm);
     line-height: 1;
   }
-  .host-row:hover .row-action,
-  .folder-row:hover .row-action {
+  .host-row:hover .row-action {
     opacity: 1;
   }
   .row-action:hover {
     color: var(--fg-primary);
     background: var(--surface-4);
   }
-  /* The chevron/name/action controls on a folder row are click targets,
-     not text inputs — the global accent focus ring (tokens.css's
-     *:focus-visible) reads as an unexpected flash of green on a click
-     here rather than useful keyboard-nav feedback. The rename input right
-     below keeps its own ring since typing feedback there IS useful. */
+  /* The chevron/name controls on a folder row are click targets, not text
+     inputs — the global accent focus ring (tokens.css's *:focus-visible)
+     reads as an unexpected flash of green on a click here rather than
+     useful keyboard-nav feedback. The rename input right below keeps its
+     own ring since typing feedback there IS useful. */
   .folder-row .chevron-btn:focus-visible,
-  .folder-row .folder-name:focus-visible,
-  .folder-row .row-action:focus-visible {
+  .folder-row .folder-name:focus-visible {
     outline: none;
     box-shadow: none;
   }
@@ -430,11 +409,16 @@
     min-width: 0;
     font-size: 0.78rem;
     font-family: inherit;
-    background: var(--surface-0);
+    /* No fill of its own — a --surface-1 background reliably looked like a
+       mismatched patch against the row's own state (transparent normally,
+       --surface-2 on hover), which is exactly the "background color that
+       just happens" this was fixing. The border alone is the "you're
+       editing" signal, same as FlashPad's version. */
+    background: transparent;
     color: var(--fg-primary);
-    border: none;
+    border: 1px solid var(--accent);
     border-radius: var(--radius-sm);
-    padding: 1px 4px;
+    padding: 0 0.2rem;
   }
   .rename-input:focus-visible {
     outline: none;
