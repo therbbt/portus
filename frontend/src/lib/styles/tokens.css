@@ -127,9 +127,20 @@ body {
   background: transparent;
   color: var(--fg-primary);
   font-family: var(--font-ui);
-  font-size: var(--font-size-ui);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+}
+
+/* --font-size-ui belongs on body only, not html — every component's
+   rem-based sizing (font sizes, border-radii) was copied from FlashPad's
+   own rem values specifically to match its proportions, and rem always
+   scales off the root (html) element, not body. FlashPad never sets an
+   explicit root font-size, so setting one here on html (as this used to,
+   sharing a rule with body) silently shrank every rem value throughout
+   this app by the same ~19% factor (13/16) relative to what the identical
+   rem value renders as in FlashPad — not one component, all of them. */
+body {
+  font-size: var(--font-size-ui);
 }
 
 #app {
