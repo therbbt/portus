@@ -399,9 +399,6 @@
       const options: ShellConnectOptions = { shellCommand: session.shellCommand ?? null, workingDir: session.workingDir ?? null };
       openTab("shell", session.name, options, session.id);
     } else if (session.protocol === "rdp") {
-      // No UI saves an RDP session yet (NewSessionDialog's RDP tab is
-      // connect-only) — this only matters for a hand-edited config.json,
-      // which the format allows.
       const options: RdpConnectOptions = {
         host: session.address,
         port: session.port ?? undefined,
