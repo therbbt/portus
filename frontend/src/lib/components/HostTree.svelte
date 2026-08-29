@@ -435,7 +435,12 @@
     min-width: 0;
     font-size: 0.78rem;
     font-family: inherit;
-    background: var(--surface-1);
+    /* No fill of its own — a --surface-1 background reliably looked like a
+       mismatched patch against the row's own state (transparent normally,
+       --surface-2 on hover), which is exactly the "background color that
+       just happens" this was fixing. The border alone is the "you're
+       editing" signal, same as FlashPad's version. */
+    background: transparent;
     color: var(--fg-primary);
     border: 1px solid var(--accent);
     border-radius: var(--radius-sm);
