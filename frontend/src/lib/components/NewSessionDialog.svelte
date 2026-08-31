@@ -13,6 +13,7 @@
   } from "../bridge";
   import { listSerialPorts } from "../bridge";
   import Dialog from "./Dialog.svelte";
+  import FolderSelect from "./FolderSelect.svelte";
 
   // One popup for creating any session type - type is picked via the tab
   // strip below, not by which component gets mounted (that's how it used
@@ -335,12 +336,7 @@
       </label>
       <label class="field narrow">
         <span>Folder</span>
-        <select bind:value={groupId}>
-          <option value="">None</option>
-          {#each groups as group (group.id)}
-            <option value={group.id}>{group.name}</option>
-          {/each}
-        </select>
+        <FolderSelect {groups} bind:value={groupId} />
       </label>
     </div>
     <p class="hint">The credential above goes in your OS keychain, not this config file.</p>
@@ -429,8 +425,7 @@
     width: 90px;
   }
 
-  input,
-  select {
+  input {
     background: var(--surface-1);
     border: none;
     border-radius: var(--radius-sm);
@@ -438,21 +433,7 @@
     color: var(--fg-primary);
     font-size: 0.8rem;
   }
-  select {
-    /* Without this, the native control keeps its own baked-in vertical
-       padding on top of ours, rendering noticeably taller than a text
-       input even with identical CSS padding — this is what actually made
-       it look mismatched. The custom arrow replaces the one appearance:
-       none removes. */
-    appearance: none;
-    -webkit-appearance: none;
-    padding-right: 1.4rem;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2.5 3.5L5 6.5L7.5 3.5' fill='none' stroke='%2397958d' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.45rem center;
-  }
-  input:focus-visible,
-  select:focus-visible {
+  input:focus-visible {
     box-shadow: 0 0 0 2px var(--accent);
   }
 
