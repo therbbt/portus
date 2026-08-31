@@ -13,6 +13,13 @@
  * swap is a one-file change.
  */
 :root {
+  /* Portus is always dark, never following the OS light/dark setting —
+     without this, a <select>'s closed state respects our CSS just fine,
+     but its native dropdown popup (which CSS can't style directly) falls
+     back to the browser's light-theme UA widget, rendering as a jarring
+     white box against every dark panel here. */
+  color-scheme: dark;
+
   /* Surfaces — tonal steps, no borders/shadows to separate panels */
   --surface-0: #16161a; /* window background (FlashPad --bg) */
   --surface-1: #1e1e22; /* rail / panel background (FlashPad --panel) */
