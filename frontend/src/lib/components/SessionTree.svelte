@@ -280,7 +280,11 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
-    padding: 0.3rem 0.4rem;
+    /* Matches folder-row's tighter padding — this being two lines (name +
+       address) instead of folders' one already makes it read as the
+       bigger row; the old, roomier padding on top of that made the hover
+       highlight feel oversized. */
+    padding: 0.2rem 0.4rem;
     background: transparent;
     border: none;
     color: var(--fg-primary);
