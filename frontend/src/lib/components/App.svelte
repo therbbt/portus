@@ -399,9 +399,6 @@
       const options: ShellConnectOptions = { shellCommand: session.shellCommand ?? null, workingDir: session.workingDir ?? null };
       openTab("shell", session.name, options, session.id);
     } else if (session.protocol === "rdp") {
-      // No UI saves an RDP session yet (NewSessionDialog's RDP tab is
-      // connect-only) — this only matters for a hand-edited config.json,
-      // which the format allows.
       const options: RdpConnectOptions = {
         host: session.address,
         port: session.port ?? undefined,
@@ -441,6 +438,18 @@
   }
 
   function onPaneClosed(paneId: string) {
+    const pane = panes[paneId];
+    // A session that never got past "connecting" failed outright — bad
+    // host, wrong credentials, unreachable server. Auto-closing here would
+    // hide the error Terminal.svelte just wrote into the pane before
+    // there's any chance to read it, so leave it open (flipping the dot to
+    // "disconnected" so it doesn't look stuck) and let the user close it
+    // manually instead. A session that did connect and later disconnects
+    // still auto-closes, unchanged.
+    if (pane && pane.state === "connecting") {
+      panes = { ...panes, [paneId]: { ...pane, state: "disconnected" } };
+      return;
+    }
     const tabId = findTabIdForPane(paneId);
     if (tabId) closePane(tabId, paneId);
   }

@@ -104,6 +104,20 @@
       ],
     });
   }
+
+  function openSessionMenu(event: MouseEvent, session: SavedSession) {
+    // RDP has no edit dialog yet (see NewSessionDialog.svelte) — a saved
+    // RDP session can only be deleted and re-created, not edited in place.
+    const canEdit = session.protocol === "ssh" || session.protocol === "serial" || session.protocol === "shell";
+    dispatch("openContextMenu", {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        ...(canEdit ? [{ label: "Edit", action: () => dispatch("editSession", session) }, { label: "", separator: true }] : []),
+        { label: "Delete", danger: true, action: () => dispatch("deleteSession", session) },
+      ],
+    });
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -182,73 +196,23 @@
         </li>
         {#if !group.collapsed}
           {#each sessionsIn(group.id, sessions) as session (session.id)}
-            <li class="session-row nested">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <li class="session-row nested" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
               <button class="session-main" on:click={() => dispatch("connect", session)}>
                 <span class="session-name">{session.name}</span>
                 <span class="session-meta">{protocolLabel[session.protocol]} · {session.address}</span>
               </button>
-              {#if session.protocol === "ssh" || session.protocol === "serial" || session.protocol === "shell"}
-                <span
-                  class="row-action"
-                  role="button"
-                  tabindex="0"
-                  aria-label={`Edit ${session.name}`}
-                  title={`Edit ${session.name}`}
-                  on:click|stopPropagation={() => dispatch("editSession", session)}
-                  on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("editSession", session)}
-                >
-                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M11 2l3 3-8 8-3.5.5.5-3.5z" />
-                  </svg>
-                </span>
-              {/if}
-              <span
-                class="row-action"
-                role="button"
-                tabindex="0"
-                aria-label={`Delete ${session.name}`}
-                title={`Delete ${session.name}`}
-                on:click|stopPropagation={() => dispatch("deleteSession", session)}
-                on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteSession", session)}
-              >
-                ×
-              </span>
             </li>
           {/each}
         {/if}
       {/each}
       {#each ungroupedSessions as session (session.id)}
-        <li class="session-row">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <li class="session-row" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
           <button class="session-main" on:click={() => dispatch("connect", session)}>
             <span class="session-name">{session.name}</span>
             <span class="session-meta">{protocolLabel[session.protocol]} · {session.address}</span>
           </button>
-          {#if session.protocol === "ssh" || session.protocol === "serial" || session.protocol === "shell"}
-            <span
-              class="row-action"
-              role="button"
-              tabindex="0"
-              aria-label={`Edit ${session.name}`}
-              title={`Edit ${session.name}`}
-              on:click|stopPropagation={() => dispatch("editSession", session)}
-              on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("editSession", session)}
-            >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 2l3 3-8 8-3.5.5.5-3.5z" />
-              </svg>
-            </span>
-          {/if}
-          <span
-            class="row-action"
-            role="button"
-            tabindex="0"
-            aria-label={`Delete ${session.name}`}
-            title={`Delete ${session.name}`}
-            on:click|stopPropagation={() => dispatch("deleteSession", session)}
-            on:keydown|stopPropagation={(e) => e.key === "Enter" && dispatch("deleteSession", session)}
-          >
-            ×
-          </span>
         </li>
       {/each}
     </ul>
@@ -316,7 +280,11 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
-    padding: 0.3rem 0.4rem;
+    /* Matches folder-row's tighter padding — this being two lines (name +
+       address) instead of folders' one already makes it read as the
+       bigger row; the old, roomier padding on top of that made the hover
+       highlight feel oversized. */
+    padding: 0.2rem 0.4rem;
     background: transparent;
     border: none;
     color: var(--fg-primary);
@@ -376,23 +344,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .row-action {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    padding: 0 0.4rem;
-    color: var(--fg-tertiary);
-    opacity: 0;
-    border-radius: var(--radius-sm);
-    line-height: 1;
-  }
-  .session-row:hover .row-action {
-    opacity: 1;
-  }
-  .row-action:hover {
-    color: var(--fg-primary);
-    background: var(--surface-4);
   }
   /* The chevron/name controls on a folder row are click targets, not text
      inputs — the global accent focus ring (tokens.css's *:focus-visible)

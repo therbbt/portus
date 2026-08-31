@@ -17,9 +17,12 @@
   // One popup for creating any session type - type is picked via the tab
   // strip below, not by which component gets mounted (that's how it used
   // to work: the old NewSessionMenu picked one of four separate dialogs).
-  // Create-only: editing an existing saved session still goes through the
-  // original per-protocol dialogs (SshConnectDialog etc.) unchanged - see
-  // the plan this was built from for why.
+  // Create-only: editing an existing saved SSH/serial/shell session still
+  // goes through the original per-protocol dialogs (SshConnectDialog etc.)
+  // unchanged - see the plan this was built from for why. RDP has no edit
+  // dialog at all yet (SessionTree hides its edit icon for rdp rows) - a
+  // saved RDP session can be created and connected to, but only deleted
+  // and re-created, not edited in place.
   export let groups: Group[] = [];
   // Lets a specific entry point (e.g. EmptyMainArea's "Connect over RDP"
   // button) open straight onto the matching tab instead of always SSH.
@@ -42,7 +45,7 @@
   let sshKeyPath = "";
   let sshPassphrase = "";
 
-  // ---- RDP (connect-only - no saveName/groupId row shown for this tab) ----
+  // ---- RDP ----
   let rdpHost = "";
   let rdpPort = 3389;
   let rdpUsername = "";
@@ -59,7 +62,11 @@
   let availablePorts: string[] = [];
   const commonBaudRates = [9600, 19200, 38400, 57600, 115200];
 
-  // ---- Shared save fields (SSH / Terminal / Serial only) ----
+  // ---- Shared save fields (all four types) ----
+  // Collapsed by default - showing the name/folder fields unconditionally
+  // made this dialog feel a lot heavier than the single-protocol dialogs it
+  // replaced, for the common case of just connecting without saving.
+  let wantsToSave = false;
   let saveName = "";
   let groupId = "";
 
@@ -81,7 +88,7 @@
   // Terminal: both fields are optional (blank = system default), so
   // there's nothing to require to connect.
   $: canConnect = activeType === "ssh" ? sshValid : activeType === "rdp" ? rdpValid : activeType === "serial" ? serialValid : true;
-  $: canSave = activeType !== "rdp" && canConnect && saveName.trim().length > 0;
+  $: canSave = wantsToSave && canConnect && saveName.trim().length > 0;
 
   function buildSshAuth(): SshAuth {
     return sshAuthMethod === "password" ? { type: "password", password: sshPassword } : { type: "privateKey", path: sshKeyPath.trim(), passphrase: sshPassphrase || null };
@@ -99,7 +106,18 @@
       dispatch("connect", { protocol: "ssh", title: `${options.username}@${options.host}`, options, save });
     } else if (activeType === "rdp") {
       const options: RdpConnectOptions = { host: rdpHost.trim(), port: rdpPort, username: rdpUsername.trim(), password: rdpPassword, domain: rdpDomain.trim() || null };
-      dispatch("connect", { protocol: "rdp", title: `${options.username}@${options.host}`, options, save: null });
+      const save: SaveSessionInput | null = canSave
+        ? {
+            name: saveName.trim(),
+            groupId: groupId || null,
+            protocol: "rdp",
+            address: rdpHost.trim(),
+            port: rdpPort,
+            username: rdpUsername.trim(),
+            auth: { type: "password", password: rdpPassword },
+          }
+        : null;
+      dispatch("connect", { protocol: "rdp", title: `${options.username}@${options.host}`, options, save });
     } else if (activeType === "shell") {
       const options: ShellConnectOptions = { shellCommand: shellCommand.trim() || null, workingDir: workingDir.trim() || null };
       // Generated client-side (rather than left for save_session to fill
@@ -149,6 +167,16 @@
       });
     } else if (activeType === "serial") {
       dispatch("save", { name: saveName.trim(), groupId: groupId || null, protocol: "serial", address: serialPortName.trim(), baudRate: serialBaudRate, auth: { type: "none" } });
+    } else if (activeType === "rdp") {
+      dispatch("save", {
+        name: saveName.trim(),
+        groupId: groupId || null,
+        protocol: "rdp",
+        address: rdpHost.trim(),
+        port: rdpPort,
+        username: rdpUsername.trim(),
+        auth: { type: "password", password: rdpPassword },
+      });
     }
   }
 
@@ -164,9 +192,10 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<Dialog label="New session" width="420px" on:cancel={() => dispatch("cancel")}>
+<Dialog label="New session" width="380px" on:cancel={() => dispatch("cancel")}>
   <h2 class="title">New session</h2>
 
+  <div class="form">
   <div class="type-toggle" role="tablist" aria-label="Session type">
     {#each ["ssh", "rdp", "shell", "serial"] as const as type (type)}
       <button type="button" class="type-btn" class:active={activeType === type} role="tab" aria-selected={activeType === type} on:click={() => (activeType = type)}>
@@ -284,11 +313,25 @@
     </label>
   {/if}
 
-  {#if activeType !== "rdp"}
+  <label class="save-toggle">
+    <input type="checkbox" bind:checked={wantsToSave} />
+    <span>Save this session</span>
+  </label>
+  {#if wantsToSave}
     <div class="row split">
       <label class="field grow">
-        <span>Name (to save it)</span>
-        <input type="text" bind:value={saveName} placeholder={activeType === "ssh" && sshUsername && sshHost ? `${sshUsername}@${sshHost}` : "My session"} />
+        <span>Name</span>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          type="text"
+          bind:value={saveName}
+          autofocus
+          placeholder={activeType === "ssh" && sshUsername && sshHost
+            ? `${sshUsername}@${sshHost}`
+            : activeType === "rdp" && rdpUsername && rdpHost
+              ? `${rdpUsername}@${rdpHost}`
+              : "My session"}
+        />
       </label>
       <label class="field narrow">
         <span>Folder</span>
@@ -300,17 +343,16 @@
         </select>
       </label>
     </div>
-    <p class="hint">
-      {saveName.trim() ? "The credential above goes in your OS keychain, not this config file." : "Leave the name blank for a one-off connection that isn't saved."}
-    </p>
+    <p class="hint">The credential above goes in your OS keychain, not this config file.</p>
   {/if}
 
   <div class="actions">
     <button class="btn" on:click={() => dispatch("cancel")}>Cancel</button>
-    {#if activeType !== "rdp"}
+    {#if wantsToSave}
       <button class="btn" disabled={!canSave} on:click={saveOnly}>Save</button>
     {/if}
     <button class="btn primary" disabled={!canConnect} on:click={connect}>Connect</button>
+  </div>
   </div>
 </Dialog>
 
@@ -320,6 +362,30 @@
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--fg-primary);
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    /* Tighter than Dialog.svelte's own --space-3 gap between its slot's
+       direct children (title, this wrapper) - with this many stacked rows,
+       that gap compounded into a noticeably heavier-feeling dialog than
+       the single-protocol ones it replaced. */
+    gap: 0.6rem;
+  }
+
+  .save-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--fg-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+  .save-toggle input {
+    margin: 0;
+    accent-color: var(--accent);
   }
 
   .type-toggle {
