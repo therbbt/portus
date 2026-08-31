@@ -198,9 +198,8 @@
           {#each sessionsIn(group.id, sessions) as session (session.id)}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <li class="session-row nested" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
-              <button class="session-main" on:click={() => dispatch("connect", session)}>
+              <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
                 <span class="session-name">{session.name}</span>
-                <span class="session-meta">{protocolLabel[session.protocol]} · {session.address}</span>
               </button>
             </li>
           {/each}
@@ -209,9 +208,8 @@
       {#each ungroupedSessions as session (session.id)}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <li class="session-row" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
-          <button class="session-main" on:click={() => dispatch("connect", session)}>
+          <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
             <span class="session-name">{session.name}</span>
-            <span class="session-meta">{protocolLabel[session.protocol]} · {session.address}</span>
           </button>
         </li>
       {/each}
@@ -278,13 +276,12 @@
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    gap: 1px;
-    /* Matches folder-row's tighter padding — this being two lines (name +
-       address) instead of folders' one already makes it read as the
-       bigger row; the old, roomier padding on top of that made the hover
-       highlight feel oversized. */
-    padding: 0.2rem 0.4rem;
+    align-items: center;
+    /* Matches folder-row's padding now that this is a single line like
+       folder rows are — the protocol/address that used to sit below the
+       name as a second line is now a hover tooltip instead (see the
+       button's title attribute). */
+    padding: 0.22rem 0.4rem;
     background: transparent;
     border: none;
     color: var(--fg-primary);
@@ -293,13 +290,6 @@
   }
   .session-name {
     font-size: 0.78rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .session-meta {
-    font-size: 0.66rem;
-    color: var(--fg-tertiary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
