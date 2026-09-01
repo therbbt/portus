@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount } from "svelte";
   import type { SerialConnectOptions, SavedSession, Group, SaveSessionInput } from "../bridge";
   import { listSerialPorts } from "../bridge";
+  import FolderSelect from "./FolderSelect.svelte";
 
   /** When set, prefills the form from an existing saved session and treats
    * submit as an edit (saveSession overwrites it in place) rather than a new
@@ -134,12 +135,7 @@
       </label>
       <label class="field narrow">
         <span>Folder</span>
-        <select bind:value={groupId}>
-          <option value="">None</option>
-          {#each groups as group (group.id)}
-            <option value={group.id}>{group.name}</option>
-          {/each}
-        </select>
+        <FolderSelect {groups} bind:value={groupId} />
       </label>
     </div>
     {#if !saveName.trim()}
@@ -202,8 +198,7 @@
     width: 90px;
   }
 
-  input,
-  select {
+  input {
     background: var(--surface-1);
     border: none;
     border-radius: var(--radius-sm);
@@ -211,8 +206,7 @@
     color: var(--fg-primary);
     font-size: 0.8rem;
   }
-  input:focus-visible,
-  select:focus-visible {
+  input:focus-visible {
     box-shadow: 0 0 0 2px var(--accent);
   }
 
