@@ -200,9 +200,10 @@
             <li class="session-row nested" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
               <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
                 <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="1.5" y="2" width="13" height="8.5" rx="1" />
-                  <rect x="6.5" y="11.5" width="3" height="1.2" rx="0.4" />
-                  <rect x="4.5" y="13" width="7" height="1.2" rx="0.6" />
+                  <rect x="1" y="1.5" width="9.5" height="7" rx="1" />
+                  <rect x="4.5" y="9" width="2.5" height="1" rx="0.3" />
+                  <circle cx="12.3" cy="8.7" r="1.7" />
+                  <path d="M9 14.8a3.3 3.3 0 0 1 6.6 0Z" />
                 </svg>
                 <span class="session-name">{session.name}</span>
               </button>
