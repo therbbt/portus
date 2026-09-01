@@ -3,7 +3,7 @@
 //! its events back out onto the Tauri event bus. It never decides protocol
 //! behavior — that all lives in the `Session` implementations themselves.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -22,6 +22,15 @@ pub enum SessionCommand {
 #[derive(Clone, Default)]
 pub struct AppState {
     sessions: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<SessionCommand>>>>,
+    /// Saved-session ids that currently have a live session reading/writing
+    /// scrollback. Guards against two concurrently-open tabs for the same
+    /// saved shell preset interleaving their output into one shared
+    /// scrollback file — without this, opening a second tab for the same
+    /// preset replayed everything the first tab had already appended, and a
+    /// third replayed everything both the first and second had appended, so
+    /// the visible prompt count grew by one with every additional
+    /// concurrently-open tab of the same preset.
+    active_scrollback_sessions: Arc<Mutex<HashSet<Uuid>>>,
 }
 
 impl AppState {
@@ -63,18 +72,29 @@ impl AppState {
 
         // Ad-hoc "Local shell" tabs have no stable identity to persist
         // scrollback under, and every other protocol hasn't opted in yet —
-        // scoped to saved shell presets specifically for now.
-        let scrollback_saved_session_id = if protocol == "shell" { saved_session_id } else { None };
+        // scoped to saved shell presets specifically for now. If this saved
+        // session already has another tab open (claimed the id below), this
+        // one connects as a plain ad-hoc shell instead of a second writer
+        // fighting over the same scrollback file.
+        let scrollback_saved_session_id = if protocol == "shell" {
+            saved_session_id.filter(|id| self.active_scrollback_sessions.lock().unwrap().insert(*id))
+        } else {
+            None
+        };
 
         let id = Uuid::new_v4().to_string();
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         self.sessions.lock().unwrap().insert(id.clone(), cmd_tx);
 
         let sessions = self.sessions.clone();
+        let active_scrollback_sessions = self.active_scrollback_sessions.clone();
         let task_id = id.clone();
         tauri::async_runtime::spawn(async move {
             run_session(session, cmd_rx, &app, &task_id, scrollback_saved_session_id).await;
             sessions.lock().unwrap().remove(&task_id);
+            if let Some(saved_session_id) = scrollback_saved_session_id {
+                active_scrollback_sessions.lock().unwrap().remove(&saved_session_id);
+            }
         });
 
         Ok(id)

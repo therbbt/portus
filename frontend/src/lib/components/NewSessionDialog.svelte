@@ -13,6 +13,7 @@
   } from "../bridge";
   import { listSerialPorts } from "../bridge";
   import Dialog from "./Dialog.svelte";
+  import FolderSelect from "./FolderSelect.svelte";
 
   // One popup for creating any session type - type is picked via the tab
   // strip below, not by which component gets mounted (that's how it used
@@ -335,12 +336,7 @@
       </label>
       <label class="field narrow">
         <span>Folder</span>
-        <select bind:value={groupId}>
-          <option value="">None</option>
-          {#each groups as group (group.id)}
-            <option value={group.id}>{group.name}</option>
-          {/each}
-        </select>
+        <FolderSelect {groups} bind:value={groupId} />
       </label>
     </div>
     <p class="hint">The credential above goes in your OS keychain, not this config file.</p>
@@ -429,8 +425,7 @@
     width: 90px;
   }
 
-  input,
-  select {
+  input {
     background: var(--surface-1);
     border: none;
     border-radius: var(--radius-sm);
@@ -438,8 +433,7 @@
     color: var(--fg-primary);
     font-size: 0.8rem;
   }
-  input:focus-visible,
-  select:focus-visible {
+  input:focus-visible {
     box-shadow: 0 0 0 2px var(--accent);
   }
 
