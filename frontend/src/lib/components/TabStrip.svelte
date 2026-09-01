@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, tick } from "svelte";
   import type { SessionState } from "../bridge";
+  import type { ContextMenuItem } from "./ContextMenu.svelte";
 
   export let tabs: Array<{ id: string; title: string; state: SessionState }> = [];
   export let activeId: string | null = null;
@@ -10,7 +11,24 @@
     close: { id: string };
     rename: { id: string; title: string };
     new: void;
+    saveAs: { id: string };
+    // The menu itself renders from App.svelte, same as every other overlay
+    // in this app - a fixed-position popup shouldn't be nested inside a
+    // flex-item component's own render tree.
+    openContextMenu: { x: number; y: number; items: ContextMenuItem[] };
   }>();
+
+  function openTabMenu(event: MouseEvent, tab: { id: string; title: string }) {
+    dispatch("openContextMenu", {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        { label: "Save as session…", action: () => dispatch("saveAs", { id: tab.id }) },
+        { label: "", separator: true },
+        { label: "Close", action: () => dispatch("close", { id: tab.id }) },
+      ],
+    });
+  }
 
   let editingId: string | null = null;
   let editValue = "";
@@ -94,6 +112,7 @@
         aria-selected={tab.id === activeId}
         on:click={() => dispatch("select", { id: tab.id })}
         on:keydown={(e) => e.key === "Enter" && dispatch("select", { id: tab.id })}
+        on:contextmenu|preventDefault|stopPropagation={(e) => openTabMenu(e, tab)}
       >
         <span class="status-dot" data-state={tab.state}></span>
         {#if editingId === tab.id}
