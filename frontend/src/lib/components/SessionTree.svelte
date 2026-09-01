@@ -199,6 +199,11 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <li class="session-row nested" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
               <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
+                <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="1.5" y="2" width="13" height="8.5" rx="1" />
+                  <rect x="6.5" y="11.5" width="3" height="1.2" rx="0.4" />
+                  <rect x="4.5" y="13" width="7" height="1.2" rx="0.6" />
+                </svg>
                 <span class="session-name">{session.name}</span>
               </button>
             </li>
@@ -277,6 +282,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
+    gap: 0.35rem;
     /* Matches folder-row's padding now that this is a single line like
        folder rows are — the protocol/address that used to sit below the
        name as a second line is now a hover tooltip instead (see the
@@ -288,7 +294,13 @@
     cursor: pointer;
     text-align: left;
   }
+  .session-icon {
+    flex-shrink: 0;
+    color: var(--fg-secondary);
+  }
   .session-name {
+    flex: 1;
+    min-width: 0;
     font-size: 0.78rem;
     overflow: hidden;
     text-overflow: ellipsis;
