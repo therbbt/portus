@@ -6,9 +6,13 @@
 
   /** Disables the Split button when there's no active tab to split. */
   export let splitDisabled = false;
+  /** Drives the Sidebar button's pressed look — App.svelte owns the actual
+   * visible/hidden state, this just reflects it. */
+  export let sidebarHidden = false;
 
   const appWindow = getCurrentWindow();
   const dispatch = createEventDispatcher<{
+    toggleSidebar: void;
     splitRow: void;
     splitColumn: void;
     showShortcuts: void;
@@ -24,6 +28,19 @@
   </div>
   <div class="spacer" data-tauri-drag-region></div>
   <div class="toolbar-group">
+    <button
+      class="toolbar-btn"
+      class:active={sidebarHidden}
+      aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
+      title={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
+      on:click={() => dispatch("toggleSidebar")}
+    >
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+        <line x1="6" y1="2.5" x2="6" y2="13.5" />
+      </svg>
+      <span>Sidebar</span>
+    </button>
     <SplitMenu disabled={splitDisabled} on:splitRow={() => dispatch("splitRow")} on:splitColumn={() => dispatch("splitColumn")} />
     <button class="toolbar-btn" aria-label="Keyboard shortcuts" on:click={() => dispatch("showShortcuts")}>
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
@@ -104,7 +121,8 @@
     line-height: 1;
     cursor: pointer;
   }
-  .toolbar-btn:hover {
+  .toolbar-btn:hover,
+  .toolbar-btn.active {
     background: var(--surface-2);
     color: var(--fg-primary);
   }

@@ -92,7 +92,16 @@
   let editingSerialSession: SavedSession | null = null;
   let editingShellSession: SavedSession | null = null;
   let sidebarWidth = 260;
+  const SIDEBAR_VISIBLE_KEY = "portus.sidebarVisible";
+  // Defaults true (visible) - only an explicit "false" ever written by
+  // toggleSidebar() below should hide it on next launch.
+  let sidebarVisible = typeof window === "undefined" ? true : window.localStorage.getItem(SIDEBAR_VISIBLE_KEY) !== "false";
   let config: PortusConfig | null = null;
+
+  function toggleSidebar() {
+    sidebarVisible = !sidebarVisible;
+    window.localStorage.setItem(SIDEBAR_VISIBLE_KEY, String(sidebarVisible));
+  }
 
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   $: activePane = activeTab ? (panes[activeTab.activePaneId] ?? null) : null;
@@ -551,20 +560,24 @@
   <ResizeHandles />
   <TitleBar
     splitDisabled={!activeTab}
+    sidebarHidden={!sidebarVisible}
+    on:toggleSidebar={toggleSidebar}
     on:splitRow={() => splitActivePane("row")}
     on:splitColumn={() => splitActivePane("column")}
     on:showShortcuts={() => (showShortcutsPanel = true)}
     on:showSettings={openSettingsPanel}
   />
   <div class="action-bar">
-    <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
-      <NewSessionButton
-        on:open={() => {
-          newSessionInitialType = "ssh";
-          showNewSessionDialog = true;
-        }}
-      />
-    </div>
+    {#if sidebarVisible}
+      <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
+        <NewSessionButton
+          on:open={() => {
+            newSessionInitialType = "ssh";
+            showNewSessionDialog = true;
+          }}
+        />
+      </div>
+    {/if}
     <div class="action-bar-main">
       <TabStrip
         tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: panes[t.activePaneId]?.state ?? "disconnected" }))}
@@ -582,20 +595,22 @@
     </div>
   </div>
   <div class="body">
-    <SessionTree
-      {sessions}
-      {groups}
-      width={sidebarWidth}
-      on:connect={(e) => connectToSavedSession(e.detail)}
-      on:deleteSession={(e) => onDeleteSession(e.detail)}
-      on:editSession={(e) => onEditSession(e.detail)}
-      on:createFolder={(e) => onCreateFolder(e.detail.name)}
-      on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
-      on:deleteFolder={(e) => onDeleteFolder(e.detail)}
-      on:toggleFolder={(e) => onToggleFolder(e.detail)}
-      on:openContextMenu={(e) => (contextMenu = e.detail)}
-    />
-    <SidebarResizer bind:width={sidebarWidth} />
+    {#if sidebarVisible}
+      <SessionTree
+        {sessions}
+        {groups}
+        width={sidebarWidth}
+        on:connect={(e) => connectToSavedSession(e.detail)}
+        on:deleteSession={(e) => onDeleteSession(e.detail)}
+        on:editSession={(e) => onEditSession(e.detail)}
+        on:createFolder={(e) => onCreateFolder(e.detail.name)}
+        on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
+        on:deleteFolder={(e) => onDeleteFolder(e.detail)}
+        on:toggleFolder={(e) => onToggleFolder(e.detail)}
+        on:openContextMenu={(e) => (contextMenu = e.detail)}
+      />
+      <SidebarResizer bind:width={sidebarWidth} />
+    {/if}
     <div class="main">
       <div class="session-area">
         {#each tabs as tab (tab.id)}
