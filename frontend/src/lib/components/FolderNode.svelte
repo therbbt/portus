@@ -1,6 +1,20 @@
 <script context="module" lang="ts">
+  import type { SavedSession, Group } from "../bridge";
+
   export type DropZone = "before" | "inside" | "after";
   export type DropTarget = { kind: "session" | "group" | "root"; id: string; zone: DropZone };
+
+  // A folder and a session can sit side by side at the same level now
+  // (root, or inside the same parent folder) in whatever order dragging
+  // put them in — rather than always rendering every folder before any
+  // loose session, this merges both kinds into one sortOrder-ordered list.
+  export type TreeEntry = { kind: "group"; item: Group } | { kind: "session"; item: SavedSession };
+
+  export function mergeEntries(allGroups: Group[], allSessions: SavedSession[], parentId: string | null): TreeEntry[] {
+    const groupEntries: TreeEntry[] = allGroups.filter((g) => (g.parentId ?? null) === parentId).map((item) => ({ kind: "group", item }));
+    const sessionEntries: TreeEntry[] = allSessions.filter((s) => (s.groupId ?? null) === parentId).map((item) => ({ kind: "session", item }));
+    return [...groupEntries, ...sessionEntries].sort((a, b) => a.item.sortOrder - b.item.sortOrder);
+  }
 
   export interface FolderNodeActions {
     toggleFolder(group: Group): void;
@@ -20,8 +34,6 @@
 </script>
 
 <script lang="ts">
-  import type { SavedSession, Group } from "../bridge";
-
   // Recursive tree node: one folder row, plus (unless collapsed) its own
   // child folders via <svelte:self> and its own direct sessions. Mirrors
   // FlashPad's TreeNode.svelte structure - a callback-bag prop (`actions`)
@@ -43,8 +55,7 @@
   let renameValue = group.name;
   $: if (renamingGroupId === group.id) renameValue = group.name;
 
-  $: childFolders = allGroups.filter((g) => g.parentId === group.id).sort((a, b) => a.sortOrder - b.sortOrder);
-  $: childSessions = allSessions.filter((s) => s.groupId === group.id).sort((a, b) => a.sortOrder - b.sortOrder);
+  $: childEntries = mergeEntries(allGroups, allSessions, group.id);
 
   const BASE_INDENT_REM = 0.4;
   const INDENT_STEP_REM = 1.1;
@@ -103,45 +114,46 @@
   {/if}
 </li>
 {#if !group.collapsed}
-  {#each childFolders as child (child.id)}
-    <svelte:self
-      group={child}
-      {allGroups}
-      {allSessions}
-      depth={depth + 1}
-      {renamingGroupId}
-      {draggingSessionId}
-      {draggingGroupId}
-      {dropTarget}
-      {protocolLabel}
-      {focusAndSelect}
-      {actions}
-    />
-  {/each}
-  {#each childSessions as session (session.id)}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <li
-      class="session-row"
-      style="padding-left: {sessionIndent}"
-      class:dragging={draggingSessionId === session.id}
-      class:drop-before={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "before"}
-      class:drop-after={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "after"}
-      draggable="true"
-      on:dragstart={(e) => actions.startDragSession(e, session)}
-      on:dragend={actions.endDrag}
-      on:dragover={(e) => actions.dragOverSession(e, session)}
-      on:drop={actions.drop}
-      on:contextmenu|preventDefault|stopPropagation={(e) => actions.openSessionMenu(e, session)}
-    >
-      <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => actions.connect(session)}>
-        <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-          <path d="M4.5 6.5L7 9L4.5 11.5" />
-          <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
-        </svg>
-        <span class="session-name">{session.name}</span>
-      </button>
-    </li>
+  {#each childEntries as entry (entry.item.id)}
+    {#if entry.kind === "group"}
+      <svelte:self
+        group={entry.item}
+        {allGroups}
+        {allSessions}
+        depth={depth + 1}
+        {renamingGroupId}
+        {draggingSessionId}
+        {draggingGroupId}
+        {dropTarget}
+        {protocolLabel}
+        {focusAndSelect}
+        {actions}
+      />
+    {:else}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <li
+        class="session-row"
+        style="padding-left: {sessionIndent}"
+        class:dragging={draggingSessionId === entry.item.id}
+        class:drop-before={dropTarget?.kind === "session" && dropTarget.id === entry.item.id && dropTarget.zone === "before"}
+        class:drop-after={dropTarget?.kind === "session" && dropTarget.id === entry.item.id && dropTarget.zone === "after"}
+        draggable="true"
+        on:dragstart={(e) => actions.startDragSession(e, entry.item)}
+        on:dragend={actions.endDrag}
+        on:dragover={(e) => actions.dragOverSession(e, entry.item)}
+        on:drop={actions.drop}
+        on:contextmenu|preventDefault|stopPropagation={(e) => actions.openSessionMenu(e, entry.item)}
+      >
+        <button class="session-main" title={`${protocolLabel[entry.item.protocol]} · ${entry.item.address}`} on:click={() => actions.connect(entry.item)}>
+          <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+            <path d="M4.5 6.5L7 9L4.5 11.5" />
+            <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
+          </svg>
+          <span class="session-name">{entry.item.name}</span>
+        </button>
+      </li>
+    {/if}
   {/each}
 {/if}
 
