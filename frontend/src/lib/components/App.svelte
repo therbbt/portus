@@ -40,6 +40,8 @@
     saveGroup,
     deleteGroup,
     setGroupCollapsed,
+    reorderSession,
+    reorderGroup,
   } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
   import { terminalAppearanceVersion } from "../terminalAppearance";
@@ -393,6 +395,16 @@
     await setGroupCollapsed(group.id, collapsed);
   }
 
+  async function onReorderSession(detail: { id: string; groupId: string | null; sortOrder: number }) {
+    const result = await reorderSession(detail.id, detail.groupId, detail.sortOrder);
+    sessions = result.sessions;
+  }
+
+  async function onReorderGroup(detail: { id: string; parentId: string | null; sortOrder: number }) {
+    const result = await reorderGroup(detail.id, detail.parentId, detail.sortOrder);
+    groups = result.groups;
+  }
+
   async function connectToSavedSession(session: SavedSession) {
     const secret = await resolveSessionSecret(session.id).catch(() => null);
 
@@ -607,6 +619,8 @@
         on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
         on:deleteFolder={(e) => onDeleteFolder(e.detail)}
         on:toggleFolder={(e) => onToggleFolder(e.detail)}
+        on:reorderSession={(e) => onReorderSession(e.detail)}
+        on:reorderGroup={(e) => onReorderGroup(e.detail)}
         on:openContextMenu={(e) => (contextMenu = e.detail)}
       />
       <SidebarResizer bind:width={sidebarWidth} />

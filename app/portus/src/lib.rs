@@ -28,6 +28,8 @@ pub fn run() {
             commands::save_group,
             commands::delete_group,
             commands::set_group_collapsed,
+            commands::reorder_session,
+            commands::reorder_group,
             commands::sftp_connect,
             commands::sftp_list,
             commands::sftp_read_file,

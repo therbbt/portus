@@ -75,6 +75,18 @@ pub enum AuthInput {
     PrivateKey { path: String, passphrase: Option<String> },
 }
 
+/// One past the highest `sort_order` among items whose key (`group_id` or
+/// `parent_id`) matches `scope` — i.e. "append after every existing
+/// sibling." `0.0` when `scope` has no siblings yet.
+fn append_sort_order<T>(items: &[T], scope: Option<Uuid>, key: impl Fn(&T) -> Option<Uuid>, order: impl Fn(&T) -> f64) -> f64 {
+    let max_existing = items.iter().filter(|item| key(item) == scope).map(order).fold(f64::NEG_INFINITY, f64::max);
+    if max_existing.is_finite() {
+        max_existing + 1.0
+    } else {
+        0.0
+    }
+}
+
 fn resolve_auth(auth: AuthInput, existing: Option<&AuthMethod>) -> Result<AuthMethod, String> {
     match auth {
         AuthInput::Unchanged => Ok(existing.cloned().unwrap_or(AuthMethod::None)),
@@ -126,6 +138,16 @@ pub fn save_session(
         }
     }
 
+    // A plain edit (rename, credential change, etc.) keeps its existing
+    // position; only a genuinely new session gets appended after its
+    // siblings. Reordering itself happens through `reorder_session`.
+    let sort_order = config
+        .sessions
+        .iter()
+        .find(|s| s.id == id)
+        .map(|s| s.sort_order)
+        .unwrap_or_else(|| append_sort_order(&config.sessions, group_id, |s| s.group_id, |s| s.sort_order));
+
     let saved_session = SavedSession {
         id,
         name,
@@ -138,6 +160,7 @@ pub fn save_session(
         auth: resolved_auth,
         shell_command,
         working_dir,
+        sort_order,
     };
 
     if let Some(existing) = config.sessions.iter_mut().find(|s| s.id == id) {
@@ -193,9 +216,38 @@ pub fn save_group(id: Option<Uuid>, name: String, parent_id: Option<Uuid>) -> Re
         existing.name = name;
         existing.parent_id = parent_id;
     } else {
-        config.groups.push(Group { id, name, parent_id, collapsed: false });
+        let sort_order = append_sort_order(&config.groups, parent_id, |g| g.parent_id, |g| g.sort_order);
+        config.groups.push(Group { id, name, parent_id, collapsed: false, sort_order });
     }
 
+    portus_core::config::save(&config).map_err(|e| e.to_string())?;
+    Ok(config)
+}
+
+/// Moves a saved session to a new folder (or the root, if `group_id` is
+/// `None`) and/or a new position within that folder — a drag-and-drop in
+/// the sidebar. `sort_order` is computed frontend-side, typically as the
+/// midpoint between the two siblings the drop landed between.
+#[tauri::command]
+pub fn reorder_session(session_id: Uuid, group_id: Option<Uuid>, sort_order: f64) -> Result<Config, String> {
+    let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
+    if let Some(session) = config.sessions.iter_mut().find(|s| s.id == session_id) {
+        session.group_id = group_id;
+        session.sort_order = sort_order;
+    }
+    portus_core::config::save(&config).map_err(|e| e.to_string())?;
+    Ok(config)
+}
+
+/// Moves a saved folder to a new parent (or the root) and/or a new position
+/// among its siblings — see [`reorder_session`].
+#[tauri::command]
+pub fn reorder_group(group_id: Uuid, parent_id: Option<Uuid>, sort_order: f64) -> Result<Config, String> {
+    let mut config = portus_core::config::load().map_err(|e| e.to_string())?;
+    if let Some(group) = config.groups.iter_mut().find(|g| g.id == group_id) {
+        group.parent_id = parent_id;
+        group.sort_order = sort_order;
+    }
     portus_core::config::save(&config).map_err(|e| e.to_string())?;
     Ok(config)
 }
