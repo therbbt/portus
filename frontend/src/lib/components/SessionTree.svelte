@@ -199,11 +199,10 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <li class="session-row nested" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
               <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
-                <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="1" y="1.5" width="9.5" height="7" rx="1" />
-                  <rect x="4.5" y="9" width="2.5" height="1" rx="0.3" />
-                  <circle cx="12.3" cy="8.7" r="1.7" />
-                  <path d="M9 14.8a3.3 3.3 0 0 1 6.6 0Z" />
+                <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+                  <path d="M4.5 6.5L7 9L4.5 11.5" />
+                  <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
                 </svg>
                 <span class="session-name">{session.name}</span>
               </button>
