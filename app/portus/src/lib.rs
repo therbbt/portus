@@ -2,6 +2,7 @@ mod adapter;
 pub mod commands;
 mod rdp_state;
 mod sftp_state;
+mod tray;
 
 use adapter::AppState;
 use rdp_state::RdpState;
@@ -13,6 +14,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tray::global_shortcut_plugin())
         .manage(AppState::default())
         .manage(SftpState::default())
         .manage(RdpState::default())
@@ -43,6 +45,10 @@ pub fn run() {
             commands::rdp_connect,
             commands::rdp_disconnect,
         ])
+        .setup(|app| {
+            tray::setup(app)?;
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running portus");
 }
