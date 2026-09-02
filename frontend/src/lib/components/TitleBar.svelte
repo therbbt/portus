@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import RingMark from "./RingMark.svelte";
+  import AppIcon from "./AppIcon.svelte";
   import SplitMenu from "./SplitMenu.svelte";
 
   /** Disables the Split button when there's no active tab to split. */
@@ -23,7 +23,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="titlebar" data-tauri-drag-region on:dblclick={() => appWindow.toggleMaximize()}>
   <div class="brand" data-tauri-drag-region>
-    <RingMark size={14} color="var(--fg-secondary)" />
+    <AppIcon size={16} />
     <span data-tauri-drag-region>Portus</span>
   </div>
   <div class="spacer" data-tauri-drag-region></div>
