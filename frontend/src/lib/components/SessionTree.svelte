@@ -2,7 +2,7 @@
   import { createEventDispatcher } from "svelte";
   import RingMark from "./RingMark.svelte";
   import type { ContextMenuItem } from "./ContextMenu.svelte";
-  import FolderNode, { type DropTarget, type DropZone, type FolderNodeActions } from "./FolderNode.svelte";
+  import FolderNode, { type DropTarget, type DropZone, type FolderNodeActions, type TreeEntry, mergeEntries } from "./FolderNode.svelte";
   import type { SavedSession, Group } from "../bridge";
 
   export let sessions: SavedSession[] = [];
@@ -37,13 +37,11 @@
   };
 
   // Folders can nest arbitrarily deep (Group.parentId) — rendered via
-  // FolderNode.svelte's own <svelte:self> recursion below. This component
-  // only fans out the root level and the sessions with no folder at all.
-  $: rootGroups = groups.filter((g) => !g.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
-  $: ungroupedSessions = sessions.filter((s) => !s.groupId).sort((a, b) => a.sortOrder - b.sortOrder);
-  const sessionsIn = (groupId: string, allSessions: SavedSession[]) =>
-    allSessions.filter((s) => s.groupId === groupId).sort((a, b) => a.sortOrder - b.sortOrder);
-  const childGroupsOf = (parentId: string) => groups.filter((g) => g.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
+  // FolderNode.svelte's own <svelte:self> recursion below. A folder and a
+  // loose session can sit side by side at the same level in whatever order
+  // dragging put them in, rather than every folder always rendering before
+  // any session — see mergeEntries().
+  $: rootEntries = mergeEntries(groups, sessions, null);
 
   let creatingFolder = false;
   let newFolderName = "";
@@ -189,9 +187,12 @@
   }
 
   function dragOverSession(event: DragEvent, session: SavedSession) {
-    if (!draggingSession || draggingSession.id === session.id) return;
+    if (draggingSession?.id === session.id) return;
+    if (!draggingSession && !draggingGroup) return;
     event.preventDefault();
     event.stopPropagation();
+    // A session never has an "inside" zone - it can't contain anything -
+    // but a dragged folder can still land before/after it as a sibling.
     dropTarget = { kind: "session", id: session.id, zone: zoneFromEvent(event, false) };
   }
 
@@ -223,39 +224,34 @@
     endDrag();
     if (!target) return;
 
-    if (session) {
-      if (target.kind === "root") {
-        dispatch("reorderSession", { id: session.id, groupId: null, sortOrder: appendSortOrder(ungroupedSessions) });
-      } else if (target.kind === "group" && target.zone === "inside") {
-        const targetGroup = groups.find((g) => g.id === target.id);
-        if (!targetGroup) return;
-        dispatch("reorderSession", { id: session.id, groupId: targetGroup.id, sortOrder: appendSortOrder(sessionsIn(targetGroup.id, sessions)) });
-      } else if (target.kind === "session") {
-        const targetSession = sessions.find((s) => s.id === target.id);
-        if (!targetSession) return;
-        const list = targetSession.groupId ? sessionsIn(targetSession.groupId, sessions) : ungroupedSessions;
-        const idx = list.findIndex((s) => s.id === targetSession.id);
-        const zone = target.zone === "inside" ? "after" : target.zone;
-        dispatch("reorderSession", { id: session.id, groupId: targetSession.groupId ?? null, sortOrder: sortOrderBetween(list, idx, zone) });
-      }
-      // A session dropped before/after a folder row doesn't reposition
-      // anything — sessions and folders aren't siblings in the same
-      // ordered list, so only a folder's "inside" zone is meaningful here.
-    } else if (group) {
-      if (target.kind === "root") {
-        dispatch("reorderGroup", { id: group.id, parentId: null, sortOrder: appendSortOrder(rootGroups) });
-      } else if (target.kind === "group") {
-        const targetGroup = groups.find((g) => g.id === target.id);
-        if (!targetGroup) return;
-        if (target.zone === "inside") {
-          dispatch("reorderGroup", { id: group.id, parentId: targetGroup.id, sortOrder: appendSortOrder(childGroupsOf(targetGroup.id)) });
-        } else {
-          const siblings = targetGroup.parentId ? childGroupsOf(targetGroup.parentId) : rootGroups;
-          const idx = siblings.findIndex((g) => g.id === targetGroup.id);
-          dispatch("reorderGroup", { id: group.id, parentId: targetGroup.parentId ?? null, sortOrder: sortOrderBetween(siblings, idx, target.zone) });
-        }
-      }
+    const dispatchMove = (parentId: string | null, sortOrder: number) => {
+      if (group && parentId !== null && isDescendantOrSelf(parentId, group.id)) return; // would create a cycle
+      if (session) dispatch("reorderSession", { id: session.id, groupId: parentId, sortOrder });
+      else if (group) dispatch("reorderGroup", { id: group.id, parentId, sortOrder });
+    };
+
+    if (target.kind === "root") {
+      dispatchMove(null, appendSortOrder(mergeEntries(groups, sessions, null).map((e) => e.item)));
+      return;
     }
+
+    if (target.kind === "group" && target.zone === "inside") {
+      const targetGroup = groups.find((g) => g.id === target.id);
+      if (!targetGroup) return;
+      dispatchMove(targetGroup.id, appendSortOrder(mergeEntries(groups, sessions, targetGroup.id).map((e) => e.item)));
+      return;
+    }
+
+    // Before/after a session or a folder row: become a sibling at that
+    // target's own level, positioned relative to it - a folder and a
+    // session dropped near each other both just mean "put me here."
+    const targetParentId =
+      target.kind === "session" ? (sessions.find((s) => s.id === target.id)?.groupId ?? null) : (groups.find((g) => g.id === target.id)?.parentId ?? null);
+    const siblings = mergeEntries(groups, sessions, targetParentId).map((e) => e.item);
+    const idx = siblings.findIndex((item) => item.id === target.id);
+    if (idx === -1) return;
+    const zone = target.zone === "inside" ? "after" : target.zone; // "inside" only ever reachable on a session target
+    dispatchMove(targetParentId, sortOrderBetween(siblings, idx, zone));
   }
 
   const actions: FolderNodeActions = {
@@ -319,44 +315,45 @@
           />
         </li>
       {/if}
-      {#each rootGroups as group (group.id)}
-        <FolderNode
-          {group}
-          allGroups={groups}
-          allSessions={sessions}
-          depth={0}
-          {renamingGroupId}
-          draggingSessionId={draggingSession?.id ?? null}
-          draggingGroupId={draggingGroup?.id ?? null}
-          {dropTarget}
-          {protocolLabel}
-          {focusAndSelect}
-          {actions}
-        />
-      {/each}
-      {#each ungroupedSessions as session (session.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <li
-          class="session-row"
-          class:dragging={draggingSession?.id === session.id}
-          class:drop-before={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "before"}
-          class:drop-after={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "after"}
-          draggable="true"
-          on:dragstart={(e) => startDragSession(e, session)}
-          on:dragend={endDrag}
-          on:dragover={(e) => dragOverSession(e, session)}
-          on:drop={handleDrop}
-          on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}
-        >
-          <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
-            <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-              <path d="M4.5 6.5L7 9L4.5 11.5" />
-              <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
-            </svg>
-            <span class="session-name">{session.name}</span>
-          </button>
-        </li>
+      {#each rootEntries as entry (entry.item.id)}
+        {#if entry.kind === "group"}
+          <FolderNode
+            group={entry.item}
+            allGroups={groups}
+            allSessions={sessions}
+            depth={0}
+            {renamingGroupId}
+            draggingSessionId={draggingSession?.id ?? null}
+            draggingGroupId={draggingGroup?.id ?? null}
+            {dropTarget}
+            {protocolLabel}
+            {focusAndSelect}
+            {actions}
+          />
+        {:else}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <li
+            class="session-row"
+            class:dragging={draggingSession?.id === entry.item.id}
+            class:drop-before={dropTarget?.kind === "session" && dropTarget.id === entry.item.id && dropTarget.zone === "before"}
+            class:drop-after={dropTarget?.kind === "session" && dropTarget.id === entry.item.id && dropTarget.zone === "after"}
+            draggable="true"
+            on:dragstart={(e) => startDragSession(e, entry.item)}
+            on:dragend={endDrag}
+            on:dragover={(e) => dragOverSession(e, entry.item)}
+            on:drop={handleDrop}
+            on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, entry.item)}
+          >
+            <button class="session-main" title={`${protocolLabel[entry.item.protocol]} · ${entry.item.address}`} on:click={() => dispatch("connect", entry.item)}>
+              <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+                <path d="M4.5 6.5L7 9L4.5 11.5" />
+                <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
+              </svg>
+              <span class="session-name">{entry.item.name}</span>
+            </button>
+          </li>
+        {/if}
       {/each}
     </ul>
   {/if}
