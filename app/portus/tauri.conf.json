@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/icon.png",
       "icons/32x32.png",
@@ -37,5 +38,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/therbbt/portus/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      },
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwMjk3OTQ2MDFCOERBQTYKUldTbTJyZ0JSbmtwOExpRFlkVzlEbEVFMGRyQ1NSNDlnOTdEa0Q5RStIVFFyR2JycW1HdFV6TnIK"
+    }
   }
 }
