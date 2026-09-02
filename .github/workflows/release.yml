@@ -1,0 +1,130 @@
+name: Release
+
+# Triggered by pushing a version tag (e.g. bump the version in
+# frontend/package.json, app/portus/tauri.conf.json, AND the workspace
+# Cargo.toml's [workspace.package].version, commit, then
+# `git tag v1.2.0 && git push origin v1.2.0`) - builds signed installers for
+# Windows and Linux and publishes them as a draft GitHub Release. The
+# release is created as a draft deliberately: review/edit the release notes
+# and hit "Publish" yourself once you're happy with it - the in-app updater
+# only ever sees published (non-draft) releases, so nothing reaches users
+# until you do.
+#
+# check-version runs first and fails fast if the pushed tag doesn't match
+# the version in all three places - catches a forgotten version bump before
+# spending several minutes building on two platforms.
+#
+# Requires two repository secrets before this can sign anything:
+#   TAURI_SIGNING_PRIVATE_KEY          - see README for how to generate
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD - the password used when generating it
+# Without these set, tauri-action still builds but the artifacts won't be
+# signed, and the in-app updater will refuse them.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  # Lets you manually re-run this against an existing tag ref (e.g. to
+  # retry a release that failed for infra reasons) without needing to
+  # delete and re-push the tag.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Cheap and runs first, so a forgotten version bump fails in seconds
+  # instead of after several minutes of Windows/Linux builds.
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches package.json, tauri.conf.json, and Cargo.toml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(jq -r .version frontend/package.json)
+          TAURI_VERSION=$(jq -r .version app/portus/tauri.conf.json)
+          CARGO_VERSION=$(grep -m1 '^version' Cargo.toml | sed -E 's/version *= *"(.*)"/\1/')
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (version $TAG_VERSION) doesn't match frontend/package.json's version ($PKG_VERSION)"
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$TAURI_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (version $TAG_VERSION) doesn't match app/portus/tauri.conf.json's version ($TAURI_VERSION)"
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (version $TAG_VERSION) doesn't match Cargo.toml's [workspace.package] version ($CARGO_VERSION)"
+            exit 1
+          fi
+          echo "Version check passed: tag matches package.json, tauri.conf.json, and Cargo.toml ($TAG_VERSION)"
+
+  release-windows:
+    needs: check-version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm install --prefix frontend
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: app/portus
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Portus ${{ github.ref_name }}'
+          releaseDraft: true
+          generateReleaseNotes: true
+
+  release-linux:
+    needs: check-version
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      # Fedora container so the .deb/.rpm here are built against the same
+      # dnf package set a real Fedora user would have, same reasoning as
+      # matching a target distro's actual library versions rather than
+      # whatever happens to be on the generic ubuntu-latest runner.
+      - name: Install system dependencies
+        run: |
+          dnf install -y \
+            git gcc gcc-c++ make pkgconf-pkg-config \
+            glib2-devel gtk3-devel webkit2gtk4.1-devel javascriptcoregtk4.1-devel \
+            librsvg2-devel libappindicator-gtk3-devel systemd-devel \
+            rpm-build file curl
+
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm install --prefix frontend
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: app/portus
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Portus ${{ github.ref_name }}'
+          releaseDraft: true
+          generateReleaseNotes: true
+          args: --bundles deb,rpm

@@ -16,6 +16,9 @@
   import ShortcutsPanel from "./ShortcutsPanel.svelte";
   import NewSessionButton from "./NewSessionButton.svelte";
   import SaveAsDialog from "./SaveAsDialog.svelte";
+  import UpdateToast from "./UpdateToast.svelte";
+  import UpdateDialog from "./UpdateDialog.svelte";
+  import { check as checkForUpdate, type Update } from "@tauri-apps/plugin-updater";
   import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
   import type {
     Protocol,
@@ -105,6 +108,47 @@
     window.localStorage.setItem(SIDEBAR_VISIBLE_KEY, String(sidebarVisible));
   }
 
+  // --- Auto-update -------------------------------------------------------
+  const DISMISSED_UPDATE_VERSION_KEY = "portus.dismissedUpdateVersion";
+  let availableUpdate: Update | null = null;
+  let updateDetailsOpen = false;
+  let dismissedUpdateVersion: string | null =
+    typeof window === "undefined" ? null : window.localStorage.getItem(DISMISSED_UPDATE_VERSION_KEY);
+  $: showUpdateToast = availableUpdate !== null && availableUpdate.version !== dismissedUpdateVersion;
+
+  // Checked once on startup only (never polled/re-run while the app is
+  // open) - failures (no internet, GitHub unreachable, etc.) are swallowed
+  // silently since a missed check just means no toast shows, never
+  // anything that blocks using the app.
+  async function checkForAppUpdate() {
+    try {
+      const update = await checkForUpdate();
+      if (update) availableUpdate = update;
+    } catch (err) {
+      console.error("Update check failed", err);
+    }
+  }
+
+  function dismissUpdate() {
+    if (!availableUpdate) return;
+    dismissedUpdateVersion = availableUpdate.version;
+    window.localStorage.setItem(DISMISSED_UPDATE_VERSION_KEY, availableUpdate.version);
+    updateDetailsOpen = false;
+  }
+
+  // Manual "Check for updates" from Settings - unlike the silent startup
+  // check, errors are left to propagate so Settings can show them, and the
+  // dialog (with the changelog) opens immediately on top of Settings if
+  // something is found, rather than waiting to be clicked from a toast.
+  async function checkForUpdateManually(): Promise<boolean> {
+    const update = await checkForUpdate();
+    if (update) {
+      availableUpdate = update;
+      updateDetailsOpen = true;
+    }
+    return !!update;
+  }
+
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   $: activePane = activeTab ? (panes[activeTab.activePaneId] ?? null) : null;
   $: activeSshOptions = activePane?.protocol === "ssh" ? (activePane.options as SshConnectOptions) : null;
@@ -185,6 +229,8 @@
     // Terminal-first: land on a working shell rather than the empty state,
     // same as opening a real terminal app.
     newShellTab();
+
+    void checkForAppUpdate();
   });
 
   function openSettingsPanel() {
@@ -736,12 +782,19 @@
       terminalFontFamily={config.settings.terminalFontFamily}
       terminalFontSize={config.settings.terminalFontSize}
       terminalColors={config.settings.terminalColors}
+      onCheckForUpdate={checkForUpdateManually}
       on:save={(e) => onSaveSettings(e.detail)}
       on:cancel={() => (showSettingsPanel = false)}
     />
   {/if}
   {#if showShortcutsPanel}
     <ShortcutsPanel on:cancel={() => (showShortcutsPanel = false)} />
+  {/if}
+  {#if showUpdateToast && !updateDetailsOpen}
+    <UpdateToast version={availableUpdate?.version ?? ""} onViewDetails={() => (updateDetailsOpen = true)} onDismiss={dismissUpdate} />
+  {/if}
+  {#if updateDetailsOpen && availableUpdate}
+    <UpdateDialog update={availableUpdate} onDismiss={dismissUpdate} />
   {/if}
   {#if contextMenu}
     <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => (contextMenu = null)} />
