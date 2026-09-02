@@ -20,6 +20,8 @@
     // in this app (connect dialogs, Settings) — a fixed-position popup
     // shouldn't be nested inside a flex-item component's own render tree.
     openContextMenu: { x: number; y: number; items: ContextMenuItem[] };
+    reorderSession: { id: string; groupId: string | null; sortOrder: number };
+    reorderGroup: { id: string; parentId: string | null; sortOrder: number };
   }>();
 
   // "echo" is a debug-only session kind, never a real saved session's
@@ -36,9 +38,11 @@
   // Folders can nest in the data model (Group.parentId), but nothing in the
   // UI creates a nested one yet — only top-level folders are rendered, same
   // as FlashPad's folders-of-notes before you factor in sub-notes.
-  $: rootGroups = groups.filter((g) => !g.parentId).sort((a, b) => a.name.localeCompare(b.name));
-  $: ungroupedSessions = sessions.filter((s) => !s.groupId);
-  const sessionsIn = (groupId: string, allSessions: SavedSession[]) => allSessions.filter((s) => s.groupId === groupId);
+  // Ordered by sortOrder (drag-and-drop position) rather than name now.
+  $: rootGroups = groups.filter((g) => !g.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
+  $: ungroupedSessions = sessions.filter((s) => !s.groupId).sort((a, b) => a.sortOrder - b.sortOrder);
+  const sessionsIn = (groupId: string, allSessions: SavedSession[]) =>
+    allSessions.filter((s) => s.groupId === groupId).sort((a, b) => a.sortOrder - b.sortOrder);
 
   let creatingFolder = false;
   let newFolderName = "";
@@ -118,6 +122,124 @@
       ],
     });
   }
+
+  // --- Drag and drop ---------------------------------------------------
+  // Mirrors FlashPad's TreeNode.svelte pattern (drop zone = before/inside/
+  // after based on cursor position within the target row), adapted to a
+  // flatter two-level model: sessions belong to at most one folder, and
+  // folders don't nest in the UI yet, so a folder row only ever accepts
+  // before/after (reordering among root folders) while a session row only
+  // ever accepts before/after (reordering among its current siblings) and
+  // a folder's "inside" zone is what actually files a session into it.
+
+  type DropZone = "before" | "inside" | "after";
+  type DropTarget = { kind: "session" | "group" | "root"; id: string; zone: DropZone };
+
+  let draggingSession: SavedSession | null = null;
+  let draggingGroup: Group | null = null;
+  let dropTarget: DropTarget | null = null;
+
+  function zoneFromEvent(event: DragEvent, allowInside: boolean): DropZone {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const ratio = (event.clientY - rect.top) / rect.height;
+    if (!allowInside) return ratio < 0.5 ? "before" : "after";
+    return ratio < 0.25 ? "before" : ratio > 0.75 ? "after" : "inside";
+  }
+
+  function sortOrderBetween(list: Array<{ sortOrder: number }>, targetIndex: number, zone: "before" | "after"): number {
+    if (zone === "before") {
+      const prev = list[targetIndex - 1];
+      const target = list[targetIndex];
+      return prev ? (prev.sortOrder + target.sortOrder) / 2 : target.sortOrder - 1;
+    }
+    const target = list[targetIndex];
+    const next = list[targetIndex + 1];
+    return next ? (target.sortOrder + next.sortOrder) / 2 : target.sortOrder + 1;
+  }
+
+  function appendSortOrder(list: Array<{ sortOrder: number }>): number {
+    return list.length ? Math.max(...list.map((item) => item.sortOrder)) + 1 : 0;
+  }
+
+  function startDragSession(event: DragEvent, session: SavedSession) {
+    draggingSession = session;
+    draggingGroup = null;
+    event.dataTransfer?.setData("text/plain", session.id);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function startDragGroup(event: DragEvent, group: Group) {
+    draggingGroup = group;
+    draggingSession = null;
+    event.dataTransfer?.setData("text/plain", group.id);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function endDrag() {
+    draggingSession = null;
+    draggingGroup = null;
+    dropTarget = null;
+  }
+
+  function dragOverSession(event: DragEvent, session: SavedSession) {
+    if (!draggingSession || draggingSession.id === session.id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dropTarget = { kind: "session", id: session.id, zone: zoneFromEvent(event, false) };
+  }
+
+  function dragOverGroup(event: DragEvent, group: Group) {
+    if (draggingGroup?.id === group.id) return;
+    if (!draggingSession && !draggingGroup) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // A session can drop "inside" a folder to file it there; a folder can
+    // only reorder before/after another folder (no nested folders yet).
+    dropTarget = { kind: "group", id: group.id, zone: zoneFromEvent(event, !!draggingSession) };
+  }
+
+  function dragOverRoot(event: DragEvent) {
+    if (!draggingSession && !draggingGroup) return;
+    event.preventDefault();
+    dropTarget = { kind: "root", id: "__root__", zone: "after" };
+  }
+
+  function handleDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = dropTarget;
+    const session = draggingSession;
+    const group = draggingGroup;
+    endDrag();
+    if (!target) return;
+
+    if (session) {
+      if (target.kind === "root") {
+        dispatch("reorderSession", { id: session.id, groupId: null, sortOrder: appendSortOrder(ungroupedSessions) });
+      } else if (target.kind === "group" && target.zone === "inside") {
+        const targetGroup = groups.find((g) => g.id === target.id);
+        if (!targetGroup) return;
+        dispatch("reorderSession", { id: session.id, groupId: targetGroup.id, sortOrder: appendSortOrder(sessionsIn(targetGroup.id, sessions)) });
+      } else if (target.kind === "session") {
+        const targetSession = sessions.find((s) => s.id === target.id);
+        if (!targetSession) return;
+        const list = targetSession.groupId ? sessionsIn(targetSession.groupId, sessions) : ungroupedSessions;
+        const idx = list.findIndex((s) => s.id === targetSession.id);
+        const zone = target.zone === "inside" ? "after" : target.zone;
+        dispatch("reorderSession", { id: session.id, groupId: targetSession.groupId ?? null, sortOrder: sortOrderBetween(list, idx, zone) });
+      }
+      // A session dropped before/after a folder row doesn't reposition
+      // anything — sessions and folders aren't siblings in the same
+      // ordered list, so only a folder's "inside" zone is meaningful here.
+    } else if (group) {
+      if (target.kind === "root") {
+        dispatch("reorderGroup", { id: group.id, parentId: null, sortOrder: appendSortOrder(rootGroups) });
+      } else if (target.kind === "group" && target.zone !== "inside") {
+        const idx = rootGroups.findIndex((g) => g.id === target.id);
+        dispatch("reorderGroup", { id: group.id, parentId: null, sortOrder: sortOrderBetween(rootGroups, idx, target.zone) });
+      }
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -129,7 +251,16 @@
       <p class="empty-subtitle">Save a connection from the SSH or serial dialog and it'll show up here.</p>
     </div>
   {:else}
-    <ul class="session-list">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <ul
+      class="session-list"
+      class:drop-root={dropTarget?.kind === "root"}
+      on:dragover={dragOverRoot}
+      on:drop={handleDrop}
+      on:dragleave={() => {
+        if (dropTarget?.kind === "root") dropTarget = null;
+      }}
+    >
       {#if creatingFolder}
         <li class="folder-row">
           <span class="chevron-spacer"></span>
@@ -158,7 +289,19 @@
       {/if}
       {#each rootGroups as group (group.id)}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <li class="folder-row" on:contextmenu|preventDefault|stopPropagation={(e) => openFolderMenu(e, group)}>
+        <li
+          class="folder-row"
+          class:dragging={draggingGroup?.id === group.id}
+          class:drop-before={dropTarget?.kind === "group" && dropTarget.id === group.id && dropTarget.zone === "before"}
+          class:drop-inside={dropTarget?.kind === "group" && dropTarget.id === group.id && dropTarget.zone === "inside"}
+          class:drop-after={dropTarget?.kind === "group" && dropTarget.id === group.id && dropTarget.zone === "after"}
+          draggable="true"
+          on:dragstart={(e) => startDragGroup(e, group)}
+          on:dragend={endDrag}
+          on:dragover={(e) => dragOverGroup(e, group)}
+          on:drop={handleDrop}
+          on:contextmenu|preventDefault|stopPropagation={(e) => openFolderMenu(e, group)}
+        >
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span class="chevron-btn" on:click={() => dispatch("toggleFolder", group)}>
@@ -197,7 +340,18 @@
         {#if !group.collapsed}
           {#each sessionsIn(group.id, sessions) as session (session.id)}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <li class="session-row nested" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
+            <li
+              class="session-row nested"
+              class:dragging={draggingSession?.id === session.id}
+              class:drop-before={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "before"}
+              class:drop-after={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "after"}
+              draggable="true"
+              on:dragstart={(e) => startDragSession(e, session)}
+              on:dragend={endDrag}
+              on:dragover={(e) => dragOverSession(e, session)}
+              on:drop={handleDrop}
+              on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}
+            >
               <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
                 <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
@@ -212,8 +366,24 @@
       {/each}
       {#each ungroupedSessions as session (session.id)}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <li class="session-row" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
+        <li
+          class="session-row"
+          class:dragging={draggingSession?.id === session.id}
+          class:drop-before={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "before"}
+          class:drop-after={dropTarget?.kind === "session" && dropTarget.id === session.id && dropTarget.zone === "after"}
+          draggable="true"
+          on:dragstart={(e) => startDragSession(e, session)}
+          on:dragend={endDrag}
+          on:dragover={(e) => dragOverSession(e, session)}
+          on:drop={handleDrop}
+          on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}
+        >
           <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
+            <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+              <path d="M4.5 6.5L7 9L4.5 11.5" />
+              <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
+            </svg>
             <span class="session-name">{session.name}</span>
           </button>
         </li>
@@ -260,6 +430,30 @@
     padding: var(--space-2) var(--space-2) 0;
     overflow-y: auto;
     flex: 1;
+  }
+  /* Dropping in the empty space below the last row un-files a session (or
+     appends a folder) to the root — a faint inset line along the whole
+     list edge is the only feedback needed since there's no specific row
+     to highlight. */
+  .session-list.drop-root {
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .session-row.dragging,
+  .folder-row.dragging {
+    opacity: 0.5;
+  }
+  .session-row.drop-before,
+  .folder-row.drop-before {
+    box-shadow: inset 0 2px 0 0 var(--accent);
+  }
+  .session-row.drop-after,
+  .folder-row.drop-after {
+    box-shadow: inset 0 -2px 0 0 var(--accent);
+  }
+  .folder-row.drop-inside {
+    background: var(--surface-2);
+    outline: 1px dashed var(--accent);
+    outline-offset: -1px;
   }
   .session-row,
   .folder-row {
