@@ -6,6 +6,10 @@
   const SHORTCUTS: Array<{ label: string; keys: string }> = [
     { label: "Split pane right", keys: "Ctrl+Shift+D" },
     { label: "Split pane down", keys: "Ctrl+Shift+E" },
+    // A true OS-level global hotkey (works even when Portus isn't
+    // focused) - registered in Rust (see tray.rs), not App.svelte's
+    // handleKeydown like the two above.
+    { label: "Show/hide Portus", keys: "Alt+T" },
   ];
 
   let panelEl: HTMLDivElement;
