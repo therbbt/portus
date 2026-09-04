@@ -10,7 +10,7 @@ use crate::session::Protocol;
 /// Bump this whenever the on-disk shape of [`Config`] changes, and add a
 /// migration arm in [`migrate`]. The file is hand-editable, so migrations
 /// must be forgiving of missing fields rather than rejecting the file.
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +44,13 @@ pub struct Group {
     pub parent_id: Option<Uuid>,
     #[serde(default)]
     pub collapsed: bool,
+    /// Where this folder sits among its siblings (same `parent_id`), for
+    /// drag-and-drop reordering in the sidebar. Fractional on purpose: a
+    /// drop between two siblings gets the midpoint of their two values,
+    /// which never requires renumbering every other sibling the way a
+    /// plain integer index would.
+    #[serde(default)]
+    pub sort_order: f64,
 }
 
 /// A saved, reusable session profile — an SSH/RDP/serial target or a local
@@ -78,6 +85,10 @@ pub struct SavedSession {
     /// set. Ignored by every other protocol.
     #[serde(default)]
     pub working_dir: Option<String>,
+    /// Where this session sits among its siblings (same `group_id`), for
+    /// drag-and-drop reordering in the sidebar — see [`Group::sort_order`].
+    #[serde(default)]
+    pub sort_order: f64,
 }
 
 /// Never holds a literal secret — only handles into the OS keychain (see
@@ -267,12 +278,39 @@ fn migrate(mut value: serde_json::Value) -> Result<serde_json::Value, ConfigErro
         }
     }
 
+    // v3 -> v4: added `sortOrder` to both Group and SavedSession for
+    // drag-and-drop reordering. A pre-v4 file has no ordering concept at
+    // all, so this just assigns each array's existing on-disk order as its
+    // initial sortOrder (0, 1, 2, ...) — index-based rather than scoped per
+    // group/parent, but since the frontend always filters by group/parent
+    // before sorting, relative order within any given list is preserved
+    // either way.
+    if version < 4 {
+        if let Some(obj) = value.as_object_mut() {
+            for key in ["groups", "sessions"] {
+                if let Some(serde_json::Value::Array(items)) = obj.get_mut(key) {
+                    for (index, item) in items.iter_mut().enumerate() {
+                        if let Some(item_obj) = item.as_object_mut() {
+                            item_obj.entry("sortOrder").or_insert_with(|| serde_json::Value::from(index as f64));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Future migrations go here, e.g.:
-    // if version < 4 { /* rewrite `value` in place */ }
+    // if version < 5 { /* rewrite `value` in place */ }
 
     if let Some(obj) = value.as_object_mut() {
+        // "schemaVersion", matching Config's `rename_all = "camelCase"` —
+        // this used to write the snake_case "schema_version" instead, a
+        // stray key nothing ever read, leaving the real field perpetually
+        // stale on disk. Harmless in practice since every migration step
+        // above re-checks the freshly-read `version` and applies
+        // idempotently, but worth fixing rather than leaving the clutter.
         obj.insert(
-            "schema_version".to_string(),
+            "schemaVersion".to_string(),
             serde_json::Value::from(CURRENT_SCHEMA_VERSION.max(version as u32)),
         );
     }

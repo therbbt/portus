@@ -1,10 +1,15 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
+  import { getVersion } from "@tauri-apps/api/app";
   import type { TerminalColors } from "../bridge";
 
   export let terminalFontFamily: string;
   export let terminalFontSize: number;
   export let terminalColors: TerminalColors;
+  /** App.svelte owns the actual check (and opens the update dialog itself
+   * if one's found) — this just triggers it and reports whether anything
+   * came back, so this panel can show its own "you're up to date" message. */
+  export let onCheckForUpdate: () => Promise<boolean>;
 
   const dispatch = createEventDispatcher<{
     save: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors };
@@ -64,6 +69,31 @@
   // the default until touched.
   let colors: Record<keyof TerminalColors, string> = { ...DEFAULT_COLORS, ...stripNulls(terminalColors) };
   let panelEl: HTMLDivElement;
+
+  let appVersion = "";
+  let checkingForUpdate = false;
+  let updateCheckMessage = "";
+  let updateCheckError = "";
+
+  onMount(() => {
+    void getVersion().then((v) => (appVersion = v));
+  });
+
+  async function checkForUpdates() {
+    checkingForUpdate = true;
+    updateCheckMessage = "";
+    updateCheckError = "";
+    try {
+      const found = await onCheckForUpdate();
+      // If one was found, App.svelte already opens the update dialog with
+      // the changelog on top of this panel — nothing more to show here.
+      if (!found) updateCheckMessage = "You're up to date.";
+    } catch (err) {
+      updateCheckError = err instanceof Error ? err.message : "Failed to check for updates.";
+    } finally {
+      checkingForUpdate = false;
+    }
+  }
 
   function stripNulls(input: TerminalColors): Partial<Record<keyof TerminalColors, string>> {
     const result: Partial<Record<keyof TerminalColors, string>> = {};
@@ -164,6 +194,22 @@
           Only changes this machine's config — never shared or synced anywhere. These are the ANSI colors a shell
           prompt or command output picks from; they don't affect the app's own UI colors.
         </p>
+      </section>
+
+      <section class="card">
+        <span class="section-title">Updates</span>
+        <div class="update-row">
+          <span>{appVersion ? `Version ${appVersion}` : "Portus"}</span>
+          <button class="btn" disabled={checkingForUpdate} on:click={checkForUpdates}>
+            {checkingForUpdate ? "Checking…" : "Check for updates"}
+          </button>
+        </div>
+        {#if updateCheckMessage}
+          <p class="hint">{updateCheckMessage}</p>
+        {/if}
+        {#if updateCheckError}
+          <p class="hint error">{updateCheckError}</p>
+        {/if}
       </section>
     </div>
 
@@ -339,6 +385,18 @@
     margin: 0;
     font-size: 0.68rem;
     color: var(--fg-tertiary);
+  }
+  .hint.error {
+    color: var(--status-error);
+  }
+
+  .update-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    font-size: 0.78rem;
+    color: var(--fg-primary);
   }
 
   .actions {

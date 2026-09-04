@@ -91,6 +91,28 @@
   $: canConnect = activeType === "ssh" ? sshValid : activeType === "rdp" ? rdpValid : activeType === "serial" ? serialValid : true;
   $: canSave = wantsToSave && canConnect && saveName.trim().length > 0;
 
+  // Only SSH/RDP have a naturally meaningful suggested name once host and
+  // username are filled in - Terminal/Serial fall back to a generic hint
+  // ("My session") that's shown as a placeholder only, never auto-filled,
+  // since auto-filling that literal text would silently save multiple
+  // presets all named "My session".
+  $: suggestedName =
+    activeType === "ssh" && sshUsername && sshHost
+      ? `${sshUsername}@${sshHost}`
+      : activeType === "rdp" && rdpUsername && rdpHost
+        ? `${rdpUsername}@${rdpHost}`
+        : "";
+
+  // Checking "Save this session" used to leave the Name field empty with
+  // just a greyed-out suggestion shown as a placeholder - easy to mistake
+  // for an actual value, so both Save and Connect silently did nothing
+  // (no name, so nothing to save) even though everything looked filled in.
+  // Auto-filling it as a real value the moment there's a usable suggestion
+  // means leaving it untouched actually saves under that name.
+  $: if (wantsToSave && !saveName.trim() && suggestedName) {
+    saveName = suggestedName;
+  }
+
   function buildSshAuth(): SshAuth {
     return sshAuthMethod === "password" ? { type: "password", password: sshPassword } : { type: "privateKey", path: sshKeyPath.trim(), passphrase: sshPassphrase || null };
   }
@@ -323,16 +345,7 @@
       <label class="field grow">
         <span>Name</span>
         <!-- svelte-ignore a11y_autofocus -->
-        <input
-          type="text"
-          bind:value={saveName}
-          autofocus
-          placeholder={activeType === "ssh" && sshUsername && sshHost
-            ? `${sshUsername}@${sshHost}`
-            : activeType === "rdp" && rdpUsername && rdpHost
-              ? `${rdpUsername}@${rdpHost}`
-              : "My session"}
-        />
+        <input type="text" bind:value={saveName} autofocus placeholder={suggestedName || "My session"} />
       </label>
       <label class="field narrow">
         <span>Folder</span>

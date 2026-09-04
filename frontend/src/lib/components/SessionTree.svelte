@@ -2,6 +2,7 @@
   import { createEventDispatcher } from "svelte";
   import RingMark from "./RingMark.svelte";
   import type { ContextMenuItem } from "./ContextMenu.svelte";
+  import FolderNode, { type DropTarget, type DropZone, type FolderNodeActions, type TreeEntry, mergeEntries } from "./FolderNode.svelte";
   import type { SavedSession, Group } from "../bridge";
 
   export let sessions: SavedSession[] = [];
@@ -20,6 +21,8 @@
     // in this app (connect dialogs, Settings) — a fixed-position popup
     // shouldn't be nested inside a flex-item component's own render tree.
     openContextMenu: { x: number; y: number; items: ContextMenuItem[] };
+    reorderSession: { id: string; groupId: string | null; sortOrder: number };
+    reorderGroup: { id: string; parentId: string | null; sortOrder: number };
   }>();
 
   // "echo" is a debug-only session kind, never a real saved session's
@@ -33,12 +36,12 @@
     echo: "Echo",
   };
 
-  // Folders can nest in the data model (Group.parentId), but nothing in the
-  // UI creates a nested one yet — only top-level folders are rendered, same
-  // as FlashPad's folders-of-notes before you factor in sub-notes.
-  $: rootGroups = groups.filter((g) => !g.parentId).sort((a, b) => a.name.localeCompare(b.name));
-  $: ungroupedSessions = sessions.filter((s) => !s.groupId);
-  const sessionsIn = (groupId: string, allSessions: SavedSession[]) => allSessions.filter((s) => s.groupId === groupId);
+  // Folders can nest arbitrarily deep (Group.parentId) — rendered via
+  // FolderNode.svelte's own <svelte:self> recursion below. A folder and a
+  // loose session can sit side by side at the same level in whatever order
+  // dragging put them in, rather than every folder always rendering before
+  // any session — see mergeEntries().
+  $: rootEntries = mergeEntries(groups, sessions, null);
 
   let creatingFolder = false;
   let newFolderName = "";
@@ -60,19 +63,17 @@
   }
 
   let renamingGroupId: string | null = null;
-  let renameValue = "";
 
   function startRenameFolder(group: Group) {
     renamingGroupId = group.id;
-    renameValue = group.name;
   }
 
-  function commitRenameFolder(id: string) {
+  function commitRenameFolder(id: string, name: string) {
     if (renamingGroupId !== id) return;
     renamingGroupId = null;
-    const name = renameValue.trim();
-    if (!name) return;
-    dispatch("renameFolder", { id, name });
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    dispatch("renameFolder", { id, name: trimmed });
   }
 
   function cancelRenameFolder() {
@@ -118,6 +119,156 @@
       ],
     });
   }
+
+  // --- Drag and drop ---------------------------------------------------
+  // Mirrors FlashPad's TreeNode.svelte pattern (drop zone = before/inside/
+  // after based on cursor position within the target row). A session row
+  // only ever accepts before/after (reordering among its current
+  // siblings) — a folder's "inside" zone is what files a session into it.
+  // A folder row accepts all three: before/after reorders among its
+  // current siblings, "inside" reparents it under the target folder.
+
+  let draggingSession: SavedSession | null = null;
+  let draggingGroup: Group | null = null;
+  let dropTarget: DropTarget | null = null;
+
+  function zoneFromEvent(event: DragEvent, allowInside: boolean): DropZone {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const ratio = (event.clientY - rect.top) / rect.height;
+    if (!allowInside) return ratio < 0.5 ? "before" : "after";
+    return ratio < 0.25 ? "before" : ratio > 0.75 ? "after" : "inside";
+  }
+
+  function sortOrderBetween(list: Array<{ sortOrder: number }>, targetIndex: number, zone: "before" | "after"): number {
+    if (zone === "before") {
+      const prev = list[targetIndex - 1];
+      const target = list[targetIndex];
+      return prev ? (prev.sortOrder + target.sortOrder) / 2 : target.sortOrder - 1;
+    }
+    const target = list[targetIndex];
+    const next = list[targetIndex + 1];
+    return next ? (target.sortOrder + next.sortOrder) / 2 : target.sortOrder + 1;
+  }
+
+  function appendSortOrder(list: Array<{ sortOrder: number }>): number {
+    return list.length ? Math.max(...list.map((item) => item.sortOrder)) + 1 : 0;
+  }
+
+  /** Is `candidateId` equal to, or nested somewhere inside, `ancestorId`?
+   * Guards against dropping a folder into itself or one of its own
+   * descendants, which would otherwise create a cycle. */
+  function isDescendantOrSelf(candidateId: string, ancestorId: string): boolean {
+    let current: Group | undefined = groups.find((g) => g.id === candidateId);
+    while (current) {
+      if (current.id === ancestorId) return true;
+      current = current.parentId ? groups.find((g) => g.id === current!.parentId) : undefined;
+    }
+    return false;
+  }
+
+  function startDragSession(event: DragEvent, session: SavedSession) {
+    draggingSession = session;
+    draggingGroup = null;
+    event.dataTransfer?.setData("text/plain", session.id);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function startDragGroup(event: DragEvent, group: Group) {
+    draggingGroup = group;
+    draggingSession = null;
+    event.dataTransfer?.setData("text/plain", group.id);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  }
+
+  function endDrag() {
+    draggingSession = null;
+    draggingGroup = null;
+    dropTarget = null;
+  }
+
+  function dragOverSession(event: DragEvent, session: SavedSession) {
+    if (draggingSession?.id === session.id) return;
+    if (!draggingSession && !draggingGroup) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // A session never has an "inside" zone - it can't contain anything -
+    // but a dragged folder can still land before/after it as a sibling.
+    dropTarget = { kind: "session", id: session.id, zone: zoneFromEvent(event, false) };
+  }
+
+  function dragOverGroup(event: DragEvent, group: Group) {
+    if (draggingGroup) {
+      if (draggingGroup.id === group.id) return;
+      if (isDescendantOrSelf(group.id, draggingGroup.id)) return;
+    } else if (!draggingSession) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    // Both a dragged session and a dragged folder can go "inside" now.
+    dropTarget = { kind: "group", id: group.id, zone: zoneFromEvent(event, true) };
+  }
+
+  function dragOverRoot(event: DragEvent) {
+    if (!draggingSession && !draggingGroup) return;
+    event.preventDefault();
+    dropTarget = { kind: "root", id: "__root__", zone: "after" };
+  }
+
+  function handleDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = dropTarget;
+    const session = draggingSession;
+    const group = draggingGroup;
+    endDrag();
+    if (!target) return;
+
+    const dispatchMove = (parentId: string | null, sortOrder: number) => {
+      if (group && parentId !== null && isDescendantOrSelf(parentId, group.id)) return; // would create a cycle
+      if (session) dispatch("reorderSession", { id: session.id, groupId: parentId, sortOrder });
+      else if (group) dispatch("reorderGroup", { id: group.id, parentId, sortOrder });
+    };
+
+    if (target.kind === "root") {
+      dispatchMove(null, appendSortOrder(mergeEntries(groups, sessions, null).map((e) => e.item)));
+      return;
+    }
+
+    if (target.kind === "group" && target.zone === "inside") {
+      const targetGroup = groups.find((g) => g.id === target.id);
+      if (!targetGroup) return;
+      dispatchMove(targetGroup.id, appendSortOrder(mergeEntries(groups, sessions, targetGroup.id).map((e) => e.item)));
+      return;
+    }
+
+    // Before/after a session or a folder row: become a sibling at that
+    // target's own level, positioned relative to it - a folder and a
+    // session dropped near each other both just mean "put me here."
+    const targetParentId =
+      target.kind === "session" ? (sessions.find((s) => s.id === target.id)?.groupId ?? null) : (groups.find((g) => g.id === target.id)?.parentId ?? null);
+    const siblings = mergeEntries(groups, sessions, targetParentId).map((e) => e.item);
+    const idx = siblings.findIndex((item) => item.id === target.id);
+    if (idx === -1) return;
+    const zone = target.zone === "inside" ? "after" : target.zone; // "inside" only ever reachable on a session target
+    dispatchMove(targetParentId, sortOrderBetween(siblings, idx, zone));
+  }
+
+  const actions: FolderNodeActions = {
+    toggleFolder: (group) => dispatch("toggleFolder", group),
+    openFolderMenu,
+    startRenameFolder,
+    commitRenameFolder,
+    cancelRenameFolder,
+    connect: (session) => dispatch("connect", session),
+    openSessionMenu,
+    startDragSession,
+    startDragGroup,
+    endDrag,
+    dragOverSession,
+    dragOverGroup,
+    drop: handleDrop,
+  };
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -129,15 +280,23 @@
       <p class="empty-subtitle">Save a connection from the SSH or serial dialog and it'll show up here.</p>
     </div>
   {:else}
-    <ul class="session-list">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <ul
+      class="session-list"
+      class:drop-root={dropTarget?.kind === "root"}
+      on:dragover={dragOverRoot}
+      on:drop={handleDrop}
+      on:dragleave={() => {
+        if (dropTarget?.kind === "root") dropTarget = null;
+      }}
+    >
       {#if creatingFolder}
         <li class="folder-row">
           <span class="chevron-spacer"></span>
           <!-- No folder icon yet here — pairing that (fairly saturated
                orange) icon with the input's own accent border made naming
                a brand-new folder read as two strong colors firing at once.
-               The icon shows up once the folder actually exists (the
-               {#each rootGroups} row below this one). -->
+               The icon shows up once the folder actually exists. -->
           <input
             class="rename-input"
             bind:value={newFolderName}
@@ -156,62 +315,45 @@
           />
         </li>
       {/if}
-      {#each rootGroups as group (group.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <li class="folder-row" on:contextmenu|preventDefault|stopPropagation={(e) => openFolderMenu(e, group)}>
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
+      {#each rootEntries as entry (entry.item.id)}
+        {#if entry.kind === "group"}
+          <FolderNode
+            group={entry.item}
+            allGroups={groups}
+            allSessions={sessions}
+            depth={0}
+            {renamingGroupId}
+            draggingSessionId={draggingSession?.id ?? null}
+            draggingGroupId={draggingGroup?.id ?? null}
+            {dropTarget}
+            {protocolLabel}
+            {focusAndSelect}
+            {actions}
+          />
+        {:else}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <span class="chevron-btn" on:click={() => dispatch("toggleFolder", group)}>
-            <svg class="chevron" class:open={!group.collapsed} width="10" height="10" viewBox="0 0 10 10">
-              <path d="M3 1 L7 5 L3 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </span>
-          <svg class="folder-icon" width="17" height="17" viewBox="0 0 16 16">
-            <path fill="currentColor" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.17a1.5 1.5 0 0 1 1.06.44l.83.82H13A1.5 1.5 0 0 1 14.5 4.26V12.5A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5V3Z" />
-          </svg>
-          {#if renamingGroupId === group.id}
-            <input
-              class="rename-input"
-              bind:value={renameValue}
-              use:focusAndSelect
-              on:click|stopPropagation
-              on:keydown|stopPropagation={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitRenameFolder(group.id);
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  cancelRenameFolder();
-                }
-              }}
-              on:blur={() => commitRenameFolder(group.id)}
-            />
-          {:else}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <span class="folder-name" on:click={() => dispatch("toggleFolder", group)} on:dblclick|stopPropagation={() => startRenameFolder(group)}>
-              {group.name}
-            </span>
-          {/if}
-        </li>
-        {#if !group.collapsed}
-          {#each sessionsIn(group.id, sessions) as session (session.id)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <li class="session-row nested" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
-              <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
-                <span class="session-name">{session.name}</span>
-              </button>
-            </li>
-          {/each}
+          <li
+            class="session-row"
+            class:dragging={draggingSession?.id === entry.item.id}
+            class:drop-before={dropTarget?.kind === "session" && dropTarget.id === entry.item.id && dropTarget.zone === "before"}
+            class:drop-after={dropTarget?.kind === "session" && dropTarget.id === entry.item.id && dropTarget.zone === "after"}
+            draggable="true"
+            on:dragstart={(e) => startDragSession(e, entry.item)}
+            on:dragend={endDrag}
+            on:dragover={(e) => dragOverSession(e, entry.item)}
+            on:drop={handleDrop}
+            on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, entry.item)}
+          >
+            <button class="session-main" title={`${protocolLabel[entry.item.protocol]} · ${entry.item.address}`} on:click={() => dispatch("connect", entry.item)}>
+              <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+                <path d="M4.5 6.5L7 9L4.5 11.5" />
+                <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
+              </svg>
+              <span class="session-name">{entry.item.name}</span>
+            </button>
+          </li>
         {/if}
-      {/each}
-      {#each ungroupedSessions as session (session.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <li class="session-row" on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, session)}>
-          <button class="session-main" title={`${protocolLabel[session.protocol]} · ${session.address}`} on:click={() => dispatch("connect", session)}>
-            <span class="session-name">{session.name}</span>
-          </button>
-        </li>
       {/each}
     </ul>
   {/if}
@@ -256,6 +398,13 @@
     overflow-y: auto;
     flex: 1;
   }
+  /* Dropping in the empty space below the last row un-files a session (or
+     appends a folder) to the root — a faint inset line along the whole
+     list edge is the only feedback needed since there's no specific row
+     to highlight. */
+  .session-list.drop-root {
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
   .session-row,
   .folder-row {
     display: flex;
@@ -266,17 +415,21 @@
   .folder-row:hover {
     background: var(--surface-2);
   }
-  .session-row.nested {
-    /* Matches FlashPad's TreeNode indent step (depth * 14px, roughly 30px
-       for a leaf one level in) rather than Portus's previous, noticeably
-       shallower 1.1rem. */
-    padding-left: 1.75rem;
+  .session-row.dragging {
+    opacity: 0.5;
+  }
+  .session-row.drop-before {
+    box-shadow: inset 0 2px 0 0 var(--accent);
+  }
+  .session-row.drop-after {
+    box-shadow: inset 0 -2px 0 0 var(--accent);
   }
   .session-main {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: center;
+    gap: 0.35rem;
     /* Matches folder-row's padding now that this is a single line like
        folder rows are — the protocol/address that used to sit below the
        name as a second line is now a hover tooltip instead (see the
@@ -288,7 +441,13 @@
     cursor: pointer;
     text-align: left;
   }
+  .session-icon {
+    flex-shrink: 0;
+    color: var(--fg-secondary);
+  }
   .session-name {
+    flex: 1;
+    min-width: 0;
     font-size: 0.78rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -300,50 +459,9 @@
     cursor: pointer;
     user-select: none;
   }
-  .chevron-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 14px;
-    height: 14px;
-    margin: -2px;
-    padding: 2px;
-  }
   .chevron-spacer {
     flex-shrink: 0;
     width: 14px;
-  }
-  .chevron {
-    flex-shrink: 0;
-    color: var(--fg-secondary);
-    transition: transform 0.1s ease;
-  }
-  .chevron.open {
-    transform: rotate(90deg);
-  }
-  .folder-icon {
-    flex-shrink: 0;
-    color: #e8a33d;
-  }
-  .folder-name {
-    flex: 1;
-    min-width: 0;
-    font-size: 0.78rem;
-    color: var(--fg-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The chevron/name controls on a folder row are click targets, not text
-     inputs — the global accent focus ring (tokens.css's *:focus-visible)
-     reads as an unexpected flash of green on a click here rather than
-     useful keyboard-nav feedback. The rename input right below keeps its
-     own ring since typing feedback there IS useful. */
-  .folder-row .chevron-btn:focus-visible,
-  .folder-row .folder-name:focus-visible {
-    outline: none;
-    box-shadow: none;
   }
   .rename-input {
     flex: 1;
