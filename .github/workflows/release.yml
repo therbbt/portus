@@ -73,7 +73,8 @@ jobs:
           node-version: 20
 
       - name: Install frontend dependencies
-        run: npm install --prefix frontend
+        working-directory: frontend
+        run: npm install
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -114,7 +115,8 @@ jobs:
           node-version: 20
 
       - name: Install frontend dependencies
-        run: npm install --prefix frontend
+        working-directory: frontend
+        run: npm install
 
       - uses: tauri-apps/tauri-action@v0
         env:
