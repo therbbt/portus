@@ -15,6 +15,10 @@
   import SettingsPanel from "./SettingsPanel.svelte";
   import ShortcutsPanel from "./ShortcutsPanel.svelte";
   import NewSessionButton from "./NewSessionButton.svelte";
+  import SaveAsDialog from "./SaveAsDialog.svelte";
+  import UpdateToast from "./UpdateToast.svelte";
+  import UpdateDialog from "./UpdateDialog.svelte";
+  import { check as checkForUpdate, type Update } from "@tauri-apps/plugin-updater";
   import ContextMenu, { type ContextMenuItem } from "./ContextMenu.svelte";
   import type {
     Protocol,
@@ -39,6 +43,8 @@
     saveGroup,
     deleteGroup,
     setGroupCollapsed,
+    reorderSession,
+    reorderGroup,
   } from "../bridge";
   import { nextAvailableNumber } from "../tabNumbering";
   import { terminalAppearanceVersion } from "../terminalAppearance";
@@ -75,6 +81,12 @@
   // RDP has no edit path, so it has no equivalent here at all anymore).
   let showNewSessionDialog = false;
   let newSessionInitialType: "ssh" | "rdp" | "shell" | "serial" = "ssh";
+  // "Save as session" from a tab's right-click menu — saves whichever pane
+  // is currently active within that tab (the one with the split focus
+  // outline), regardless of whether it's a split tab or a single pane.
+  let showSaveAsDialog = false;
+  let saveAsPane: PaneState | null = null;
+  let saveAsSuggestedName = "";
   let showSftpPanel = false;
   let showSettingsPanel = false;
   let showShortcutsPanel = false;
@@ -85,7 +97,57 @@
   let editingSerialSession: SavedSession | null = null;
   let editingShellSession: SavedSession | null = null;
   let sidebarWidth = 260;
+  const SIDEBAR_VISIBLE_KEY = "portus.sidebarVisible";
+  // Defaults true (visible) - only an explicit "false" ever written by
+  // toggleSidebar() below should hide it on next launch.
+  let sidebarVisible = typeof window === "undefined" ? true : window.localStorage.getItem(SIDEBAR_VISIBLE_KEY) !== "false";
   let config: PortusConfig | null = null;
+
+  function toggleSidebar() {
+    sidebarVisible = !sidebarVisible;
+    window.localStorage.setItem(SIDEBAR_VISIBLE_KEY, String(sidebarVisible));
+  }
+
+  // --- Auto-update -------------------------------------------------------
+  const DISMISSED_UPDATE_VERSION_KEY = "portus.dismissedUpdateVersion";
+  let availableUpdate: Update | null = null;
+  let updateDetailsOpen = false;
+  let dismissedUpdateVersion: string | null =
+    typeof window === "undefined" ? null : window.localStorage.getItem(DISMISSED_UPDATE_VERSION_KEY);
+  $: showUpdateToast = availableUpdate !== null && availableUpdate.version !== dismissedUpdateVersion;
+
+  // Checked once on startup only (never polled/re-run while the app is
+  // open) - failures (no internet, GitHub unreachable, etc.) are swallowed
+  // silently since a missed check just means no toast shows, never
+  // anything that blocks using the app.
+  async function checkForAppUpdate() {
+    try {
+      const update = await checkForUpdate();
+      if (update) availableUpdate = update;
+    } catch (err) {
+      console.error("Update check failed", err);
+    }
+  }
+
+  function dismissUpdate() {
+    if (!availableUpdate) return;
+    dismissedUpdateVersion = availableUpdate.version;
+    window.localStorage.setItem(DISMISSED_UPDATE_VERSION_KEY, availableUpdate.version);
+    updateDetailsOpen = false;
+  }
+
+  // Manual "Check for updates" from Settings - unlike the silent startup
+  // check, errors are left to propagate so Settings can show them, and the
+  // dialog (with the changelog) opens immediately on top of Settings if
+  // something is found, rather than waiting to be clicked from a toast.
+  async function checkForUpdateManually(): Promise<boolean> {
+    const update = await checkForUpdate();
+    if (update) {
+      availableUpdate = update;
+      updateDetailsOpen = true;
+    }
+    return !!update;
+  }
 
   $: activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   $: activePane = activeTab ? (panes[activeTab.activePaneId] ?? null) : null;
@@ -167,6 +229,8 @@
     // Terminal-first: land on a working shell rather than the empty state,
     // same as opening a real terminal app.
     newShellTab();
+
+    void checkForAppUpdate();
   });
 
   function openSettingsPanel() {
@@ -377,6 +441,16 @@
     await setGroupCollapsed(group.id, collapsed);
   }
 
+  async function onReorderSession(detail: { id: string; groupId: string | null; sortOrder: number }) {
+    const result = await reorderSession(detail.id, detail.groupId, detail.sortOrder);
+    sessions = result.sessions;
+  }
+
+  async function onReorderGroup(detail: { id: string; parentId: string | null; sortOrder: number }) {
+    const result = await reorderGroup(detail.id, detail.parentId, detail.sortOrder);
+    groups = result.groups;
+  }
+
   async function connectToSavedSession(session: SavedSession) {
     const secret = await resolveSessionSecret(session.id).catch(() => null);
 
@@ -412,6 +486,69 @@
   async function onDeleteSession(session: SavedSession) {
     const config = await deleteSession(session.id);
     sessions = config.sessions;
+  }
+
+  function onSaveTabAsSession(tabId: string) {
+    const tab = tabs.find((t) => t.id === tabId);
+    const pane = tab ? panes[tab.activePaneId] : null;
+    if (!pane) return;
+    saveAsPane = pane;
+    saveAsSuggestedName = tab?.title ?? "";
+    showSaveAsDialog = true;
+  }
+
+  /** Builds a SaveSessionInput from a live pane's own connect options —
+   * `null` for protocols with nothing sensible to save (echo, telnet).
+   * Unlike the connect dialogs' own save paths, this reads a credential (if
+   * any) straight out of the pane's in-memory options rather than needing
+   * it retyped, since that's exactly what was used to establish the
+   * connection in the first place. */
+  function buildSaveInputFromPane(pane: PaneState, name: string, groupId: string | null): SaveSessionInput | null {
+    if (pane.protocol === "ssh") {
+      const options = pane.options as SshConnectOptions;
+      return { name, groupId, protocol: "ssh", address: options.host, port: options.port, username: options.username, auth: options.auth };
+    }
+    if (pane.protocol === "rdp") {
+      const options = pane.options as RdpConnectOptions;
+      return {
+        name,
+        groupId,
+        protocol: "rdp",
+        address: options.host,
+        port: options.port,
+        username: options.username,
+        auth: { type: "password", password: options.password },
+      };
+    }
+    if (pane.protocol === "serial") {
+      const options = pane.options as SerialConnectOptions;
+      return { name, groupId, protocol: "serial", address: options.portName, baudRate: options.baudRate, auth: { type: "none" } };
+    }
+    if (pane.protocol === "shell") {
+      const options = (pane.options as ShellConnectOptions | undefined) ?? {};
+      return {
+        id: crypto.randomUUID(),
+        name,
+        groupId,
+        protocol: "shell",
+        address: options.shellCommand ?? "$SHELL",
+        auth: { type: "none" },
+        shellCommand: options.shellCommand ?? null,
+        workingDir: options.workingDir ?? null,
+      };
+    }
+    return null;
+  }
+
+  async function onSaveAsSubmit(detail: { name: string; groupId: string | null }) {
+    showSaveAsDialog = false;
+    const pane = saveAsPane;
+    saveAsPane = null;
+    if (!pane) return;
+    const input = buildSaveInputFromPane(pane, detail.name, detail.groupId);
+    if (!input) return;
+    const result = await saveSession(input);
+    sessions = result.sessions;
   }
 
   function selectTab(id: string) {
@@ -481,20 +618,24 @@
   <ResizeHandles />
   <TitleBar
     splitDisabled={!activeTab}
+    sidebarHidden={!sidebarVisible}
+    on:toggleSidebar={toggleSidebar}
     on:splitRow={() => splitActivePane("row")}
     on:splitColumn={() => splitActivePane("column")}
     on:showShortcuts={() => (showShortcutsPanel = true)}
     on:showSettings={openSettingsPanel}
   />
   <div class="action-bar">
-    <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
-      <NewSessionButton
-        on:open={() => {
-          newSessionInitialType = "ssh";
-          showNewSessionDialog = true;
-        }}
-      />
-    </div>
+    {#if sidebarVisible}
+      <div class="action-bar-sidebar" style="width: {sidebarWidth}px; min-width: {sidebarWidth}px">
+        <NewSessionButton
+          on:open={() => {
+            newSessionInitialType = "ssh";
+            showNewSessionDialog = true;
+          }}
+        />
+      </div>
+    {/if}
     <div class="action-bar-main">
       <TabStrip
         tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: panes[t.activePaneId]?.state ?? "disconnected" }))}
@@ -503,6 +644,8 @@
         on:close={(e) => closeTab(e.detail.id)}
         on:rename={(e) => onRename(e.detail.id, e.detail.title)}
         on:new={newShellTab}
+        on:saveAs={(e) => onSaveTabAsSession(e.detail.id)}
+        on:openContextMenu={(e) => (contextMenu = e.detail)}
       />
       {#if activePane?.protocol === "ssh"}
         <button class="files-btn" class:active={showSftpPanel} on:click={toggleSftpPanel}>Files</button>
@@ -510,20 +653,24 @@
     </div>
   </div>
   <div class="body">
-    <SessionTree
-      {sessions}
-      {groups}
-      width={sidebarWidth}
-      on:connect={(e) => connectToSavedSession(e.detail)}
-      on:deleteSession={(e) => onDeleteSession(e.detail)}
-      on:editSession={(e) => onEditSession(e.detail)}
-      on:createFolder={(e) => onCreateFolder(e.detail.name)}
-      on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
-      on:deleteFolder={(e) => onDeleteFolder(e.detail)}
-      on:toggleFolder={(e) => onToggleFolder(e.detail)}
-      on:openContextMenu={(e) => (contextMenu = e.detail)}
-    />
-    <SidebarResizer bind:width={sidebarWidth} />
+    {#if sidebarVisible}
+      <SessionTree
+        {sessions}
+        {groups}
+        width={sidebarWidth}
+        on:connect={(e) => connectToSavedSession(e.detail)}
+        on:deleteSession={(e) => onDeleteSession(e.detail)}
+        on:editSession={(e) => onEditSession(e.detail)}
+        on:createFolder={(e) => onCreateFolder(e.detail.name)}
+        on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
+        on:deleteFolder={(e) => onDeleteFolder(e.detail)}
+        on:toggleFolder={(e) => onToggleFolder(e.detail)}
+        on:reorderSession={(e) => onReorderSession(e.detail)}
+        on:reorderGroup={(e) => onReorderGroup(e.detail)}
+        on:openContextMenu={(e) => (contextMenu = e.detail)}
+      />
+      <SidebarResizer bind:width={sidebarWidth} />
+    {/if}
     <div class="main">
       <div class="session-area">
         {#each tabs as tab (tab.id)}
@@ -612,6 +759,17 @@
       on:cancel={() => (showNewSessionDialog = false)}
     />
   {/if}
+  {#if showSaveAsDialog}
+    <SaveAsDialog
+      {groups}
+      suggestedName={saveAsSuggestedName}
+      on:save={(e) => onSaveAsSubmit(e.detail)}
+      on:cancel={() => {
+        showSaveAsDialog = false;
+        saveAsPane = null;
+      }}
+    />
+  {/if}
   {#if showSftpPanel && activeSshOptions && activePane}
     <SftpPanel
       options={activeSshOptions}
@@ -624,12 +782,19 @@
       terminalFontFamily={config.settings.terminalFontFamily}
       terminalFontSize={config.settings.terminalFontSize}
       terminalColors={config.settings.terminalColors}
+      onCheckForUpdate={checkForUpdateManually}
       on:save={(e) => onSaveSettings(e.detail)}
       on:cancel={() => (showSettingsPanel = false)}
     />
   {/if}
   {#if showShortcutsPanel}
     <ShortcutsPanel on:cancel={() => (showShortcutsPanel = false)} />
+  {/if}
+  {#if showUpdateToast && !updateDetailsOpen}
+    <UpdateToast version={availableUpdate?.version ?? ""} onViewDetails={() => (updateDetailsOpen = true)} onDismiss={dismissUpdate} />
+  {/if}
+  {#if updateDetailsOpen && availableUpdate}
+    <UpdateDialog update={availableUpdate} onDismiss={dismissUpdate} />
   {/if}
   {#if contextMenu}
     <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => (contextMenu = null)} />
