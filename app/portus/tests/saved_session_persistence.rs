@@ -24,6 +24,7 @@ fn save_resolve_and_delete_a_password_session_round_trips_through_the_keychain()
         AuthInput::Password { password: "s3cret-test-password".to_string() },
         None,
         None,
+        None,
     )
     .expect("save_session failed");
 
@@ -55,6 +56,7 @@ fn saving_a_private_key_session_with_no_passphrase_stores_no_keychain_handle() {
         Some("testuser".to_string()),
         None,
         AuthInput::PrivateKey { path: "/tmp/does-not-need-to-exist".to_string(), passphrase: None },
+        None,
         None,
         None,
     )

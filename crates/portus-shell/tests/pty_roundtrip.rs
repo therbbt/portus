@@ -73,6 +73,7 @@ async fn shell_session_honors_shell_command_and_working_dir_options() {
     let tmp = std::env::temp_dir();
     let options = ShellConnectOptions {
         shell_command: Some("/bin/sh".to_string()),
+        shell_args: None,
         working_dir: Some(tmp.to_string_lossy().to_string()),
     };
     let mut session = ShellSession::new(options);

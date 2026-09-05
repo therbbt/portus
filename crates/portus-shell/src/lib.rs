@@ -23,6 +23,12 @@ pub struct ShellConnectOptions {
     /// Overrides `$SHELL` (Unix) / `$COMSPEC` (Windows) when set.
     #[serde(default)]
     pub shell_command: Option<String>,
+    /// Arguments passed to `shell_command` — e.g. `["-d", "Ubuntu"]` to
+    /// launch a specific WSL distro via `wsl.exe`. Meaningless without
+    /// `shell_command` also set, since `CommandBuilder` (unlike a real
+    /// shell) never splits a single string into a program and its args.
+    #[serde(default)]
+    pub shell_args: Option<Vec<String>>,
     /// Overrides `$HOME` as the starting directory when set.
     #[serde(default)]
     pub working_dir: Option<String>,
@@ -59,6 +65,9 @@ impl Session for ShellSession {
 
         let shell = self.options.shell_command.clone().unwrap_or_else(default_shell);
         let mut cmd = CommandBuilder::new(shell);
+        if let Some(args) = &self.options.shell_args {
+            cmd.args(args);
+        }
         match &self.options.working_dir {
             Some(dir) => cmd.cwd(dir),
             None => {
