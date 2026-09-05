@@ -470,7 +470,11 @@
       const options: SerialConnectOptions = { portName: session.address, baudRate: session.baudRate ?? undefined };
       openTab("serial", session.name, options);
     } else if (session.protocol === "shell") {
-      const options: ShellConnectOptions = { shellCommand: session.shellCommand ?? null, workingDir: session.workingDir ?? null };
+      const options: ShellConnectOptions = {
+        shellCommand: session.shellCommand ?? null,
+        shellArgs: session.shellArgs ?? null,
+        workingDir: session.workingDir ?? null,
+      };
       openTab("shell", session.name, options, session.id);
     } else if (session.protocol === "rdp") {
       const options: RdpConnectOptions = {
@@ -526,14 +530,16 @@
     }
     if (pane.protocol === "shell") {
       const options = (pane.options as ShellConnectOptions | undefined) ?? {};
+      const isWsl = options.shellCommand === "wsl.exe" && options.shellArgs?.[0] === "-d" && options.shellArgs[1];
       return {
         id: crypto.randomUUID(),
         name,
         groupId,
         protocol: "shell",
-        address: options.shellCommand ?? "$SHELL",
+        address: isWsl ? `${options.shellArgs![1]} (WSL)` : (options.shellCommand ?? "$SHELL"),
         auth: { type: "none" },
         shellCommand: options.shellCommand ?? null,
+        shellArgs: options.shellArgs ?? null,
         workingDir: options.workingDir ?? null,
       };
     }

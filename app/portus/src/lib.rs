@@ -26,6 +26,7 @@ pub fn run() {
             commands::get_config,
             commands::save_config,
             commands::list_serial_ports,
+            commands::list_wsl_distros,
             commands::save_session,
             commands::delete_session,
             commands::resolve_session_secret,
