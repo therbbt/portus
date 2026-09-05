@@ -52,6 +52,14 @@
   }
 
   function commitCreateFolder() {
+    // Without this guard, pressing Enter commits once from the keydown
+    // handler below, which sets creatingFolder=false and removes the
+    // input from the DOM - removing a focused element fires a native
+    // blur, so on:blur then commits a second time too. Some browser
+    // engines (WebView2 on Windows, apparently, not WebKitGTK on Linux)
+    // fire that blur synchronously enough for both to actually go
+    // through, dispatching "createFolder" twice for one Enter press.
+    if (!creatingFolder) return;
     const name = newFolderName.trim();
     creatingFolder = false;
     if (!name) return;
