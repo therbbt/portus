@@ -47,6 +47,7 @@ fn deleting_a_folder_unparents_its_saved_sessions_instead_of_deleting_them() {
         AuthInput::None,
         None,
         None,
+        None,
     )
     .expect("save_session failed");
     let saved = config.sessions.iter().find(|s| s.id == saved_session_id).expect("saved session missing");

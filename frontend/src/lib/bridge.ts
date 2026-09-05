@@ -46,6 +46,9 @@ export interface RdpConnectOptions {
  * ad-hoc "Local shell" tab still opens with no options at all. */
 export interface ShellConnectOptions {
   shellCommand?: string | null;
+  /** Arguments passed to shellCommand — e.g. ["-d", "Ubuntu"] to launch a
+   * specific WSL distro via wsl.exe. See listWslDistros(). */
+  shellArgs?: string[] | null;
   workingDir?: string | null;
 }
 
@@ -61,6 +64,12 @@ export async function openSession(protocol: Protocol, options?: SessionOptions, 
 
 export async function listSerialPorts(): Promise<string[]> {
   return invoke<string[]>("list_serial_ports");
+}
+
+/** Names of the WSL distros installed on this machine (e.g. "Ubuntu"), for
+ * offering them as quick local-shell presets. Always empty off Windows. */
+export async function listWslDistros(): Promise<string[]> {
+  return invoke<string[]>("list_wsl_distros");
 }
 
 // --- Saved sessions ----------------------------------------------------------
@@ -88,6 +97,8 @@ export interface SavedSession {
   auth: AuthMethodDto;
   /** Shell-only. */
   shellCommand?: string | null;
+  /** Shell-only. */
+  shellArgs?: string[] | null;
   /** Shell-only. */
   workingDir?: string | null;
   /** Position among siblings sharing the same groupId, for drag-and-drop
@@ -163,6 +174,7 @@ export interface SaveSessionInput {
   baudRate?: number | null;
   auth: AuthInput;
   shellCommand?: string | null;
+  shellArgs?: string[] | null;
   workingDir?: string | null;
 }
 

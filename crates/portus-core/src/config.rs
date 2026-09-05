@@ -81,6 +81,11 @@ pub struct SavedSession {
     /// every other protocol.
     #[serde(default)]
     pub shell_command: Option<String>,
+    /// Local-shell-only: arguments passed to `shell_command` — e.g.
+    /// `["-d", "Ubuntu"]` to launch a specific WSL distro via `wsl.exe`.
+    /// Ignored by every other protocol.
+    #[serde(default)]
+    pub shell_args: Option<Vec<String>>,
     /// Local-shell-only: overrides `$HOME` as the starting directory when
     /// set. Ignored by every other protocol.
     #[serde(default)]

@@ -11,7 +11,7 @@
     SaveSessionInput,
     Group,
   } from "../bridge";
-  import { listSerialPorts } from "../bridge";
+  import { listSerialPorts, listWslDistros } from "../bridge";
   import Dialog from "./Dialog.svelte";
   import FolderSelect from "./FolderSelect.svelte";
 
@@ -56,6 +56,23 @@
   // ---- Terminal (protocol: "shell") ----
   let shellCommand = "";
   let workingDir = "";
+  // WSL distros installed on this machine (always empty off Windows) - see
+  // listWslDistros(). Picking one sets shellCommand to wsl.exe and tracks
+  // the distro name here for the -d argument; editing shellCommand away
+  // from "wsl.exe" by hand silently drops the selection (see wslActive).
+  let wslDistros: string[] = [];
+  let selectedWslDistro = "";
+  $: wslActive = selectedWslDistro !== "" && shellCommand === "wsl.exe";
+
+  function pickWslDistro(name: string) {
+    selectedWslDistro = name;
+    shellCommand = "wsl.exe";
+  }
+
+  function pickDefaultShell() {
+    selectedWslDistro = "";
+    if (shellCommand === "wsl.exe") shellCommand = "";
+  }
 
   // ---- Serial ----
   let serialPortName = "";
@@ -80,6 +97,12 @@
     } catch {
       // No ports, or the command isn't reachable yet - the input still
       // accepts a manually typed device path either way.
+    }
+    try {
+      wslDistros = await listWslDistros();
+    } catch {
+      // Not on Windows, or wsl.exe isn't installed - the shell command
+      // field still accepts anything typed manually either way.
     }
   });
 
@@ -142,7 +165,12 @@
         : null;
       dispatch("connect", { protocol: "rdp", title: `${options.username}@${options.host}`, options, save });
     } else if (activeType === "shell") {
-      const options: ShellConnectOptions = { shellCommand: shellCommand.trim() || null, workingDir: workingDir.trim() || null };
+      const options: ShellConnectOptions = {
+        shellCommand: shellCommand.trim() || null,
+        shellArgs: wslActive ? ["-d", selectedWslDistro] : null,
+        workingDir: workingDir.trim() || null,
+      };
+      const displayName = wslActive ? `${selectedWslDistro} (WSL)` : (options.shellCommand ?? "$SHELL");
       // Generated client-side (rather than left for save_session to fill
       // in) so the caller knows the real saved-session id immediately,
       // synchronously - needed to open the tab with the right id for
@@ -156,13 +184,14 @@
             // Not meaningful for shell, but SavedSession.address is
             // required - shown in the sidebar's meta line, so this
             // doubles as the display summary.
-            address: options.shellCommand ?? "$SHELL",
+            address: displayName,
             auth: { type: "none" },
             shellCommand: options.shellCommand,
+            shellArgs: options.shellArgs,
             workingDir: options.workingDir,
           }
         : null;
-      const title = save?.name ?? options.shellCommand ?? "Terminal";
+      const title = save?.name ?? displayName;
       dispatch("connect", { protocol: "shell", title, options, save });
     } else {
       const options: SerialConnectOptions = { portName: serialPortName.trim(), baudRate: serialBaudRate };
@@ -183,9 +212,10 @@
         name: saveName.trim(),
         groupId: groupId || null,
         protocol: "shell",
-        address: shellCommand.trim() || "$SHELL",
+        address: wslActive ? `${selectedWslDistro} (WSL)` : shellCommand.trim() || "$SHELL",
         auth: { type: "none" },
         shellCommand: shellCommand.trim() || null,
+        shellArgs: wslActive ? ["-d", selectedWslDistro] : null,
         workingDir: workingDir.trim() || null,
       });
     } else if (activeType === "serial") {
@@ -299,6 +329,20 @@
 
     <p class="hint">View-only for now — no keyboard or mouse input is sent yet.</p>
   {:else if activeType === "shell"}
+    {#if wslDistros.length > 0}
+      <label class="field">
+        <span>Run in</span>
+        <div class="type-toggle">
+          <button type="button" class="type-btn" class:active={!wslActive} on:click={pickDefaultShell}>Default shell</button>
+          {#each wslDistros as distro (distro)}
+            <button type="button" class="type-btn" class:active={wslActive && selectedWslDistro === distro} on:click={() => pickWslDistro(distro)}>
+              {distro}
+            </button>
+          {/each}
+        </div>
+      </label>
+    {/if}
+
     <label class="field">
       <span>Shell command (optional)</span>
       <!-- svelte-ignore a11y_autofocus -->

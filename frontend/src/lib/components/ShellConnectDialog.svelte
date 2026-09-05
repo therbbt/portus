@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from "svelte";
   import type { ShellConnectOptions, SavedSession, Group, SaveSessionInput } from "../bridge";
+  import { listWslDistros } from "../bridge";
   import FolderSelect from "./FolderSelect.svelte";
 
   /** When set, prefills the form from an existing saved session and treats
@@ -21,14 +22,43 @@
   let groupId = "";
   let panelEl: HTMLDivElement;
 
+  // WSL distros installed on this machine (always empty off Windows) - see
+  // listWslDistros(). Picking one sets shellCommand to wsl.exe and tracks
+  // the distro name here for the -d argument; editing shellCommand away
+  // from "wsl.exe" by hand silently drops the selection (see wslActive).
+  let wslDistros: string[] = [];
+  let selectedWslDistro = "";
+  $: wslActive = selectedWslDistro !== "" && shellCommand === "wsl.exe";
+
+  function pickWslDistro(name: string) {
+    selectedWslDistro = name;
+    shellCommand = "wsl.exe";
+  }
+
+  function pickDefaultShell() {
+    selectedWslDistro = "";
+    if (shellCommand === "wsl.exe") shellCommand = "";
+  }
+
   $: isEditing = !!editSession;
 
-  onMount(() => {
-    if (!editSession) return;
-    shellCommand = editSession.shellCommand ?? "";
-    workingDir = editSession.workingDir ?? "";
-    saveName = editSession.name;
-    groupId = editSession.groupId ?? "";
+  onMount(async () => {
+    if (editSession) {
+      shellCommand = editSession.shellCommand ?? "";
+      workingDir = editSession.workingDir ?? "";
+      saveName = editSession.name;
+      groupId = editSession.groupId ?? "";
+      const args = editSession.shellArgs;
+      if (shellCommand === "wsl.exe" && args && args[0] === "-d" && args[1]) {
+        selectedWslDistro = args[1];
+      }
+    }
+    try {
+      wslDistros = await listWslDistros();
+    } catch {
+      // Not on Windows, or wsl.exe isn't installed - the shell command
+      // field still accepts anything typed manually either way.
+    }
   });
 
   // Both fields are optional (blank = use the system default), so there's
@@ -49,9 +79,10 @@
       // Not meaningful for shell, but SavedSession.address is required —
       // shown in the sidebar's meta line, so this doubles as the display
       // summary.
-      address: shellCommand.trim() || "$SHELL",
+      address: wslActive ? `${selectedWslDistro} (WSL)` : shellCommand.trim() || "$SHELL",
       auth: { type: "none" },
       shellCommand: shellCommand.trim() || null,
+      shellArgs: wslActive ? ["-d", selectedWslDistro] : null,
       workingDir: workingDir.trim() || null,
     };
   }
@@ -60,6 +91,7 @@
     if (!canConnect) return;
     const options: ShellConnectOptions = {
       shellCommand: shellCommand.trim() || null,
+      shellArgs: wslActive ? ["-d", selectedWslDistro] : null,
       workingDir: workingDir.trim() || null,
     };
     dispatch("connect", { options, save: canSave ? buildSaveInput() : null });
@@ -93,6 +125,20 @@
 <div class="overlay" on:mousedown={handleOutsideClick}>
   <div class="panel" bind:this={panelEl} role="dialog" aria-modal="true" aria-label={isEditing ? "Edit local shell preset" : "New local shell preset"}>
     <h2 class="title">{isEditing ? "Edit local shell preset" : "New local shell preset"}</h2>
+
+    {#if wslDistros.length > 0}
+      <label class="field">
+        <span>Run in</span>
+        <div class="type-toggle">
+          <button type="button" class="type-btn" class:active={!wslActive} on:click={pickDefaultShell}>Default shell</button>
+          {#each wslDistros as distro (distro)}
+            <button type="button" class="type-btn" class:active={wslActive && selectedWslDistro === distro} on:click={() => pickWslDistro(distro)}>
+              {distro}
+            </button>
+          {/each}
+        </div>
+      </label>
+    {/if}
 
     <label class="field">
       <span>Shell command (optional)</span>
@@ -176,6 +222,28 @@
   }
   .field.narrow {
     width: 90px;
+  }
+
+  .type-toggle {
+    display: flex;
+    background: var(--surface-1);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+    gap: 2px;
+  }
+  .type-btn {
+    flex: 1;
+    padding: 0.3rem 0.5rem;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--fg-secondary);
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .type-btn.active {
+    background: var(--surface-3);
+    color: var(--fg-primary);
   }
 
   input {
