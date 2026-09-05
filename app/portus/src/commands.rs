@@ -58,6 +58,44 @@ pub fn list_serial_ports() -> Vec<String> {
     portus_serial::list_ports()
 }
 
+/// Names of the WSL distros installed on this machine (e.g. "Ubuntu"), for
+/// offering them as quick local-shell presets — `["-d", "<name>"]` as
+/// `shell_args` on a `wsl.exe` `shell_command` launches that specific one.
+/// Always empty off Windows, where WSL doesn't exist.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn list_wsl_distros() -> Vec<String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    // Suppresses the console window `wsl.exe` would otherwise briefly flash
+    // open — Portus is a GUI (non-console) app, so any subprocess it spawns
+    // that expects a console gets one of its own by default.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let output = match Command::new("wsl.exe").args(["--list", "--quiet"]).creation_flags(CREATE_NO_WINDOW).output() {
+        Ok(o) if o.status.success() => o.stdout,
+        _ => return Vec::new(),
+    };
+
+    // wsl.exe writes UTF-16LE (with a BOM) when stdout isn't a real
+    // console, as it isn't here — decoding as UTF-8 would otherwise
+    // interleave every character with a stray null byte.
+    let utf16: Vec<u16> = output.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+    String::from_utf16_lossy(&utf16)
+        .lines()
+        .map(|line| line.trim_matches(|c: char| c == '\u{feff}' || c.is_whitespace()))
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn list_wsl_distros() -> Vec<String> {
+    Vec::new()
+}
+
 /// What the frontend sends for the auth half of a session it wants saved —
 /// distinct from [`AuthMethod`] because it carries the raw secret rather
 /// than a keychain handle. `save_session` is the only place that resolves
@@ -121,6 +159,7 @@ pub fn save_session(
     baud_rate: Option<u32>,
     auth: AuthInput,
     shell_command: Option<String>,
+    shell_args: Option<Vec<String>>,
     working_dir: Option<String>,
 ) -> Result<Config, String> {
     let id = id.unwrap_or_else(Uuid::new_v4);
@@ -159,6 +198,7 @@ pub fn save_session(
         baud_rate,
         auth: resolved_auth,
         shell_command,
+        shell_args,
         working_dir,
         sort_order,
     };
