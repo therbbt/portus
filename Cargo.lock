@@ -4403,7 +4403,7 @@ dependencies = [
 
 [[package]]
 name = "portus"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4429,7 +4429,7 @@ dependencies = [
 
 [[package]]
 name = "portus-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4445,7 +4445,7 @@ dependencies = [
 
 [[package]]
 name = "portus-rdp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "image",
@@ -4463,7 +4463,7 @@ dependencies = [
 
 [[package]]
 name = "portus-serial"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4477,7 +4477,7 @@ dependencies = [
 
 [[package]]
 name = "portus-sftp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4493,7 +4493,7 @@ dependencies = [
 
 [[package]]
 name = "portus-shell"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4506,7 +4506,7 @@ dependencies = [
 
 [[package]]
 name = "portus-ssh"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4521,7 +4521,7 @@ dependencies = [
 
 [[package]]
 name = "portus-telnet"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "bytes",
