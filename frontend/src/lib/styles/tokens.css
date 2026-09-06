@@ -65,12 +65,22 @@
      Settings overrides the specific property here (App.svelte's
      applyTerminalColorVars); "Reset to defaults" there must match this
      list exactly — see SettingsPanel.svelte's DEFAULT_COLORS. Terminal.svelte
-     reads all sixteen via getComputedStyle when building xterm.js's theme. */
+     reads all sixteen via getComputedStyle when building xterm.js's theme.
+
+     Blue is lighter than its 58%-saturation siblings at the same nominal
+     "shade" (L=0.4 normal / L=0.559 bright, same as red/green/yellow/
+     magenta/cyan): blue's WCAG luminance weight is tiny (0.0722, vs green's
+     0.7152), so at the siblings' lightness it measured only ~2.2-2.8:1
+     against the terminal background — unreadably dark and muddy, not a
+     contrast problem eyeballing would ever catch. Its lightness was raised
+     (hue held fixed) until it actually clears 4.5:1 (6:1 bright), the same
+     targets the light-mode palette below was built to. The other five hues
+     haven't been re-verified this way yet and may have the same defect. */
   --ansi-black: #3a3a42;
   --ansi-red: #a1362b;
   --ansi-green: #2ba19a;
   --ansi-yellow: #a17e2b;
-  --ansi-blue: #2b5ea1;
+  --ansi-blue: #5d91d4;
   --ansi-magenta: #862ba1;
   --ansi-cyan: #2b86a1;
   --ansi-white: #97958d; /* = --fg-secondary */
@@ -78,7 +88,7 @@
   --ansi-bright-red: #d05a4d;
   --ansi-bright-green: #4dd0c8; /* = --accent, exactly — this is what a bold PS1 hostname renders with */
   --ansi-bright-yellow: #d0a94d;
-  --ansi-bright-blue: #4d86d0;
+  --ansi-bright-blue: #80a8dd;
   --ansi-bright-magenta: #b14dd0;
   --ansi-bright-cyan: #4db1d0;
   --ansi-bright-white: #ecebe7; /* = --fg-primary */
