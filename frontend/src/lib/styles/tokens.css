@@ -13,11 +13,12 @@
  * swap is a one-file change.
  */
 :root {
-  /* Portus is always dark, never following the OS light/dark setting —
-     without this, a <select>'s closed state respects our CSS just fine,
-     but its native dropdown popup (which CSS can't style directly) falls
-     back to the browser's light-theme UA widget, rendering as a jarring
-     white box against every dark panel here. */
+  /* Follows the OS light/dark setting (see the light overrides at the
+     bottom of this file) — this just picks which native-widget theme
+     (scrollbars, a <select>'s dropdown popup, etc.) matches whichever
+     palette is actually active, so a light OS doesn't get a dark-themed
+     native dropdown popup glued onto an otherwise-light app, or vice
+     versa. */
   color-scheme: dark;
 
   /* Surfaces — tonal steps, no borders/shadows to separate panels */
@@ -118,6 +119,65 @@
   --window-shadow-margin: 1px;
 
   --focus-ring: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--accent);
+}
+
+/* Light mode — follows the OS setting rather than a manual toggle, since
+   there's nowhere in this app that currently needs both available at once.
+   Surfaces/foreground are FlashPad's actual "FlashPad Light" palette (see
+   palettes.ts), same porting approach as the dark palette above. The accent
+   and every ANSI color, though, are NOT simply "the dark values" reused —
+   the dark palette's teal (#4dd0c8) and its 58%-saturation hue family were
+   tuned to read clearly against a near-black background, and have real
+   contrast failures against this light one (the raw accent teal is ~1.8:1
+   against --surface-0 here — nowhere near the ~4.5:1 body text needs).
+   Every hue below is the *same* hue and a close saturation, recalculated at
+   a darker lightness that actually clears 4.5:1 (6:1 for the bold/"bright"
+   set) against both --surface-0 and --surface-2 — verified with the WCAG
+   relative-luminance formula, not eyeballed. Bright green is still the
+   accent exactly, same identity as the dark palette. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --surface-0: #faf8f4;
+    --surface-1: #fefdfb;
+    --surface-2: #f0ece4;
+    --surface-3: #e5e0d5;
+    --surface-4: #d9d3c5;
+
+    --fg-primary: #211d18;
+    --fg-secondary: #6b6259;
+    --fg-tertiary: #8f8579;
+    --fg-disabled: #b3aa9c;
+
+    --hairline: rgba(33, 29, 24, 0.1);
+
+    --accent: #1b746e;
+    --accent-fg: #f4faf9;
+    --accent-dim: rgba(27, 116, 110, 0.14);
+
+    --status-connecting: #8a6d1f;
+    --status-connected: var(--accent);
+    --status-disconnected: #8f8579;
+    --status-error: #ef4444;
+
+    --ansi-black: #211d18; /* = --fg-primary */
+    --ansi-red: #c03d30;
+    --ansi-green: #1e7671;
+    --ansi-yellow: #856721;
+    --ansi-blue: #2e6bba;
+    --ansi-magenta: #a632c8;
+    --ansi-cyan: #23738b;
+    --ansi-white: #6b6259; /* = --fg-secondary */
+    --ansi-bright-black: #8f8579; /* = --fg-tertiary */
+    --ansi-bright-red: #a7281b;
+    --ansi-bright-green: #1b746e; /* = --accent, exactly — same identity as the dark palette */
+    --ansi-bright-yellow: #705412;
+    --ansi-bright-blue: #1b56a4;
+    --ansi-bright-magenta: #8e1daf;
+    --ansi-bright-cyan: #136076;
+    --ansi-bright-white: #e5e0d5; /* = --surface-3 */
+  }
 }
 
 * {

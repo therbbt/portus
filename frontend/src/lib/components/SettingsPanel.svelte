@@ -16,13 +16,22 @@
     cancel: void;
   }>();
 
-  // Portus's own default ANSI palette, not a generic stock one — must
-  // match tokens.css's --ansi-* defaults exactly (see the comment there
-  // for why each color is what it is). Used both to pre-fill an unset
-  // swatch and, on save, to detect "the user dragged this back to the
-  // default" so it's stored as an actual reset (null) rather than an
-  // explicit override that just happens to match.
-  const DEFAULT_COLORS: Record<keyof TerminalColors, string> = {
+  // Portus's own default ANSI palette, not a generic stock one — must match
+  // tokens.css's --ansi-* defaults exactly, for both the dark and light
+  // media blocks there (see the comments in tokens.css for why each color
+  // is what it is). Used both to pre-fill an unset swatch and, on save, to
+  // detect "the user dragged this back to the default" so it's stored as
+  // an actual reset (null) rather than an explicit override that just
+  // happens to match.
+  //
+  // Can't just read the live --ansi-* custom properties via
+  // getComputedStyle here instead of hardcoding them a second time — once
+  // a color IS customized, App.svelte's applyTerminalColorVars sets it as
+  // an inline style on <html>, which shadows tokens.css's rule in the
+  // computed value. Reading "the default" would then return whatever's
+  // currently overridden, not the actual default, defeating the one case
+  // (reset) that needs the real default most.
+  const DARK_DEFAULT_COLORS: Record<keyof TerminalColors, string> = {
     black: "#3a3a42",
     red: "#a1362b",
     green: "#2ba19a",
@@ -40,6 +49,28 @@
     brightCyan: "#4db1d0",
     brightWhite: "#ecebe7",
   };
+  const LIGHT_DEFAULT_COLORS: Record<keyof TerminalColors, string> = {
+    black: "#211d18",
+    red: "#c03d30",
+    green: "#1e7671",
+    yellow: "#856721",
+    blue: "#2e6bba",
+    magenta: "#a632c8",
+    cyan: "#23738b",
+    white: "#6b6259",
+    brightBlack: "#8f8579",
+    brightRed: "#a7281b",
+    brightGreen: "#1b746e",
+    brightYellow: "#705412",
+    brightBlue: "#1b56a4",
+    brightMagenta: "#8e1daf",
+    brightCyan: "#136076",
+    brightWhite: "#e5e0d5",
+  };
+  const DEFAULT_COLORS =
+    typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches
+      ? LIGHT_DEFAULT_COLORS
+      : DARK_DEFAULT_COLORS;
 
   const SWATCHES: Array<{ key: keyof TerminalColors; label: string }> = [
     { key: "black", label: "Black" },
