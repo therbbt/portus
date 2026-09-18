@@ -3,30 +3,19 @@
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import { WebLinksAddon } from "@xterm/addon-web-links";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import "@xterm/xterm/css/xterm.css";
   import {
     openSession,
-    newSessionId,
     writeSession,
     resizeSession,
     closeSession,
     subscribeSession,
-    trustHostKey,
     type Protocol,
     type SessionEvent,
     type SessionState,
     type SessionOptions,
   } from "../bridge";
   import { terminalAppearanceVersion } from "../terminalAppearance";
-  import {
-    highlightTerminalOutput,
-    setHighlightGreen,
-    setHighlightGet,
-    setHighlightUrl,
-    setHighlightIpv6,
-  } from "../terminalHighlight";
-  import Dialog from "./Dialog.svelte";
 
   export let protocol: Protocol = "shell";
   export let options: SessionOptions = undefined;
@@ -48,19 +37,6 @@
   let sub: { unlisten(): Promise<void> } | null = null;
   let resizeObserver: ResizeObserver;
   let resizeRaf: number | null = null;
-  /** Persists across `data` events (not recreated per-chunk) so a multi-byte
-   * UTF-8 character split across two chunks decodes correctly instead of
-   * producing a replacement character at the boundary. */
-  let decoder: TextDecoder;
-
-  /** Set while an SSH connection is refused because the server's host key
-   * doesn't match what Portus recorded last time — the changed-host-key
-   * confirm prompt renders while this is non-null. `null` the rest of the
-   * time (the vastly more common case: this never happens on a session that
-   * never hit a mismatch). */
-  let hostKeyMismatch: { hostId: string; fingerprint: string; keyBase64: string } | null = null;
-  let trustingHostKey = false;
-  let trustHostKeyError: string | null = null;
 
   // fit() forces a synchronous layout read, and xterm's own onResize
   // handler (below) already tells the backend when cols/rows actually
@@ -103,15 +79,6 @@
   function readAppearance() {
     const rootStyle = getComputedStyle(document.documentElement);
     const cssVar = (name: string) => rootStyle.getPropertyValue(name).trim();
-    // Keeps the colorizer's dedicated (non-ANSI) colors in sync with the
-    // current theme (light/dark, or a future palette swap) — see
-    // tokens.css's --highlight-* custom properties and terminalHighlight.ts's
-    // own comment on why these can't just be an ANSI code like everything
-    // else it colors.
-    setHighlightGreen(cssVar("--highlight-green"));
-    setHighlightGet(cssVar("--highlight-get"));
-    setHighlightUrl(cssVar("--highlight-url"));
-    setHighlightIpv6(cssVar("--highlight-ipv6"));
     return {
       fontFamily: cssVar("--font-mono"),
       fontSize: parseInt(cssVar("--font-size-terminal")) || 14,
@@ -157,7 +124,7 @@
   function handleEvent(event: SessionEvent) {
     switch (event.type) {
       case "data":
-        term.write(highlightTerminalOutput(decoder.decode(new Uint8Array(event.data), { stream: true })));
+        term.write(new Uint8Array(event.data));
         break;
       case "state_changed":
         dispatch("state", event.state);
@@ -171,49 +138,10 @@
       case "error":
         term.write(`\r\n\x1b[31m[portus] ${event.message}\x1b[0m\r\n`);
         break;
-      case "host_key_mismatch":
-        hostKeyMismatch = { hostId: event.hostId, fingerprint: event.fingerprint, keyBase64: event.keyBase64 };
-        break;
     }
-  }
-
-  /** Re-runs the same connect steps `onMount` performed originally — safe to
-   * repeat because `term.onData`/`onResize` below close over `sessionId` by
-   * reference, so they pick up the new id without being re-registered. */
-  async function reconnect() {
-    await sub?.unlisten();
-    decoder = new TextDecoder();
-    sessionId = newSessionId();
-    // Subscribed before the session exists on the backend at all — see
-    // openSession's doc comment for why a local shell needs this ordering.
-    sub = await subscribeSession(sessionId, handleEvent);
-    dispatch("ready", { sessionId });
-    await openSession(sessionId, protocol, options, savedSessionId);
-    void resizeSession(sessionId, term.cols, term.rows);
-  }
-
-  async function trustAndReconnect() {
-    if (!hostKeyMismatch) return;
-    trustingHostKey = true;
-    trustHostKeyError = null;
-    try {
-      await trustHostKey(hostKeyMismatch.hostId, hostKeyMismatch.keyBase64);
-      hostKeyMismatch = null;
-      await reconnect();
-    } catch (e) {
-      trustHostKeyError = e instanceof Error ? e.message : String(e);
-    } finally {
-      trustingHostKey = false;
-    }
-  }
-
-  function dismissHostKeyMismatch() {
-    hostKeyMismatch = null;
-    trustHostKeyError = null;
   }
 
   onMount(async () => {
-    decoder = new TextDecoder();
     const appearance = readAppearance();
     term = new Terminal({
       fontFamily: appearance.fontFamily,
@@ -226,36 +154,14 @@
 
     fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    // Default WebLinksAddon behavior is a bare `window.open(uri)`, which
-    // inside the Tauri webview doesn't reliably reach the OS's actual
-    // default browser — routing through the opener plugin's `openUrl`
-    // does, the same way a native "open in browser" menu item would.
-    term.loadAddon(new WebLinksAddon((_event, uri) => void openUrl(uri)));
-    // Ctrl+Shift+A rather than plain Ctrl+A — matches this app's own
-    // convention (see App.svelte's split-pane shortcuts) of using
-    // Ctrl+Shift+<key> for anything the app wants to reserve at the
-    // keyboard level, precisely because the plain combo already means
-    // something to the shell. Plain Ctrl+A is readline's "move to start of
-    // line," used constantly in everyday shell/vim editing — binding it to
-    // select-all instead would silently break that in every session.
-    // Returning `false` tells xterm.js to stop processing the event
-    // (i.e. don't also send it to the shell as input) once handled here.
-    term.attachCustomKeyEventHandler((event) => {
-      if (event.type === "keydown" && event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "a") {
-        term.selectAll();
-        return false;
-      }
-      return true;
-    });
+    term.loadAddon(new WebLinksAddon());
     term.open(container);
     fitAddon.fit();
 
-    sessionId = newSessionId();
-    // Subscribed before the session exists on the backend at all — see
-    // openSession's doc comment for why a local shell needs this ordering.
-    sub = await subscribeSession(sessionId, handleEvent);
+    sessionId = await openSession(protocol, options, savedSessionId);
     dispatch("ready", { sessionId });
-    await openSession(sessionId, protocol, options, savedSessionId);
+
+    sub = await subscribeSession(sessionId, handleEvent);
 
     term.onData((data) => {
       if (sessionId) void writeSession(sessionId, new TextEncoder().encode(data));
@@ -309,29 +215,6 @@
 
 <div class="terminal-host" class:hidden={!active} bind:this={container}></div>
 
-{#if hostKeyMismatch}
-  <Dialog label="SSH host key changed" width="440px" on:cancel={dismissHostKeyMismatch}>
-    <h2 class="title">SSH host key changed</h2>
-    <p class="body">
-      The key presented by <strong>{hostKeyMismatch.hostId}</strong> doesn't match the one Portus recorded last
-      time (fingerprint now <code>SHA256:{hostKeyMismatch.fingerprint}</code>).
-    </p>
-    <p class="body">
-      This is expected if the server was reinstalled or rebuilt. It can also mean the connection is being
-      intercepted — only continue if you're sure the new key is legitimate.
-    </p>
-    {#if trustHostKeyError}
-      <p class="error">{trustHostKeyError}</p>
-    {/if}
-    <div class="actions">
-      <button class="btn" disabled={trustingHostKey} on:click={dismissHostKeyMismatch}>Cancel</button>
-      <button class="btn danger" disabled={trustingHostKey} on:click={trustAndReconnect}>
-        {trustingHostKey ? "Connecting…" : "Trust new key & reconnect"}
-      </button>
-    </div>
-  </Dialog>
-{/if}
-
 <style>
   .terminal-host {
     width: 100%;
@@ -364,53 +247,5 @@
   .terminal-host :global(.xterm-helper-textarea:focus-visible) {
     outline: none !important;
     box-shadow: none !important;
-  }
-
-  .title {
-    margin: 0;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--fg-primary);
-  }
-  .body {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--fg-secondary);
-    line-height: 1.4;
-  }
-  .error {
-    margin: 0;
-    font-size: 0.72rem;
-    color: var(--status-error);
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    margin-top: var(--space-1);
-  }
-  .btn {
-    border: none;
-    border-radius: var(--radius-md);
-    background: var(--surface-3);
-    color: var(--fg-primary);
-    font-size: 0.78rem;
-    padding: 0.4rem 0.9rem;
-    cursor: pointer;
-  }
-  .btn:hover {
-    background: var(--surface-4);
-  }
-  .btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-  .btn.danger {
-    background: var(--status-error);
-    color: #fff;
-    font-weight: 600;
-  }
-  .btn.danger:hover {
-    filter: brightness(1.08);
   }
 </style>

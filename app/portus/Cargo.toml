@@ -20,8 +20,6 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-global-shortcut = "2"
-tauri-plugin-opener = "2"
-tauri-plugin-dialog = "2"
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

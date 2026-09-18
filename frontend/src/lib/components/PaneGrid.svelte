@@ -50,7 +50,7 @@
       >
         {#if showHeader}
           <div class="pane-header">
-            <span class="pane-dot" data-state={pane.state} data-protocol={pane.protocol}></span>
+            <span class="pane-dot" data-state={pane.state}></span>
             <span class="pane-title">{pane.title}</span>
             <span
               class="pane-close"
@@ -131,12 +131,6 @@
     background: var(--status-connecting);
   }
   .pane-dot[data-state="connected"] {
-    /* Grey by default, matching the sidebar's own non-SSH session icon
-       color (SessionTree/FolderNode's plain .session-icon) — only an SSH
-       pane earns the accent, same distinction the sidebar already draws. */
-    background: var(--fg-secondary);
-  }
-  .pane-dot[data-state="connected"][data-protocol="ssh"] {
     background: var(--status-connected);
   }
   .pane-dot[data-state="disconnected"] {

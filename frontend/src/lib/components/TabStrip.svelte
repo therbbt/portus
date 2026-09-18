@@ -1,15 +1,16 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, tick } from "svelte";
-  import type { Protocol, SessionState } from "../bridge";
+  import type { SessionState } from "../bridge";
   import type { ContextMenuItem } from "./ContextMenu.svelte";
 
-  export let tabs: Array<{ id: string; title: string; state: SessionState; protocol?: Protocol; folderSlug?: string | null }> = [];
+  export let tabs: Array<{ id: string; title: string; state: SessionState }> = [];
   export let activeId: string | null = null;
 
   const dispatch = createEventDispatcher<{
     select: { id: string };
     close: { id: string };
     rename: { id: string; title: string };
+    new: void;
     saveAs: { id: string };
     // The menu itself renders from App.svelte, same as every other overlay
     // in this app - a fixed-position popup shouldn't be nested inside a
@@ -110,11 +111,10 @@
         tabindex="0"
         aria-selected={tab.id === activeId}
         on:click={() => dispatch("select", { id: tab.id })}
-        on:auxclick|preventDefault={(e) => e.button === 1 && dispatch("close", { id: tab.id })}
         on:keydown={(e) => e.key === "Enter" && dispatch("select", { id: tab.id })}
         on:contextmenu|preventDefault|stopPropagation={(e) => openTabMenu(e, tab)}
       >
-        <span class="status-dot" data-state={tab.state} data-protocol={tab.protocol}></span>
+        <span class="status-dot" data-state={tab.state}></span>
         {#if editingId === tab.id}
           <input
             class="tab-title-input"
@@ -127,10 +127,7 @@
           />
         {:else}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <span class="tab-title" on:dblclick|stopPropagation={() => startEdit(tab)}>
-            {tab.title}
-            {#if tab.folderSlug}<span class="tab-slug">- [{tab.folderSlug}]</span>{/if}
-          </span>
+          <span class="tab-title" on:dblclick|stopPropagation={() => startEdit(tab)}>{tab.title}</span>
         {/if}
         <span
           class="tab-close"
@@ -153,6 +150,7 @@
       </svg>
     </button>
   {/if}
+  <button class="new-tab" aria-label="New tab" title="New local shell tab" on:click={() => dispatch("new")}>+</button>
 </div>
 
 <style>
@@ -226,19 +224,10 @@
     background: var(--status-connecting);
   }
   .status-dot[data-state="connected"] {
-    /* Grey by default, matching the sidebar's own non-SSH session icon
-       color (SessionTree/FolderNode's plain .session-icon) — only an SSH
-       tab earns the accent, same distinction the sidebar already draws. */
-    background: var(--fg-secondary);
-  }
-  .status-dot[data-state="connected"][data-protocol="ssh"] {
     background: var(--status-connected);
   }
   .status-dot[data-state="disconnected"] {
     background: var(--status-disconnected);
-  }
-  .tab-slug {
-    color: var(--fg-tertiary);
   }
   .tab-title-input {
     background: var(--surface-0);
@@ -261,5 +250,17 @@
   .tab-close:hover {
     color: var(--fg-primary);
     background: var(--surface-4);
+  }
+  .new-tab {
+    width: 36px;
+    background: transparent;
+    border: none;
+    color: var(--fg-tertiary);
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .new-tab:hover {
+    color: var(--fg-primary);
+    background: var(--surface-2);
   }
 </style>

@@ -70,22 +70,6 @@ impl SftpClient {
         Ok(buf)
     }
 
-    /// Streams straight from the remote file to a local one, rather than
-    /// buffering the whole thing into memory (`read_file` above) and
-    /// handing it to the frontend as one big `Vec<u8>` over the Tauri IPC
-    /// bridge — the shape `sftp_download_file` uses, paired with a native
-    /// save dialog on the frontend side so a download actually looks like
-    /// one (a real destination picker, not a blob-URL `<a download>` click
-    /// a webview may silently drop into some default folder with no
-    /// feedback at all).
-    pub async fn download_to_file(&self, remote_path: &str, local_path: &std::path::Path) -> Result<(), SftpError> {
-        let mut remote_file = self.session.open(remote_path).await?;
-        let mut local_file = tokio::fs::File::create(local_path).await?;
-        tokio::io::copy(&mut remote_file, &mut local_file).await?;
-        local_file.shutdown().await?;
-        Ok(())
-    }
-
     pub async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), SftpError> {
         let mut file = self.session.create(path).await?;
         file.write_all(data).await?;

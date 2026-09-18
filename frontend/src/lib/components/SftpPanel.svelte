@@ -1,11 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from "svelte";
-  import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
   import type { SshConnectOptions, SftpDirEntry } from "../bridge";
   import {
     sftpConnect,
     sftpList,
-    sftpDownloadFile,
+    sftpReadFile,
     sftpWriteFile,
     sftpRemoveFile,
     sftpCreateDir,
@@ -13,18 +12,11 @@
     sftpDisconnect,
   } from "../bridge";
   import RingMark from "./RingMark.svelte";
-  import type { ContextMenuItem } from "./ContextMenu.svelte";
 
   export let options: SshConnectOptions;
   export let title: string;
 
-  const dispatch = createEventDispatcher<{
-    close: void;
-    // The menu itself renders from App.svelte, same as every other overlay
-    // in this app — a fixed-position popup shouldn't be nested inside a
-    // flex-item component's own render tree.
-    openContextMenu: { x: number; y: number; items: ContextMenuItem[] };
-  }>();
+  const dispatch = createEventDispatcher<{ close: void }>();
 
   let sftpId: string | null = null;
   let currentPath = ".";
@@ -34,12 +26,6 @@
   let fileInput: HTMLInputElement;
   let newFolderOpen = false;
   let newFolderName = "";
-  // Which entry (if any) is mid-download — swaps that row's ↓ icon for a
-  // spinner, the only feedback a plain download otherwise gave (a blob-URL
-  // `<a download>` click, silently dropped wherever the webview felt like
-  // rather than the destination the user actually picked).
-  let downloadingName: string | null = null;
-  let statusMessage: string | null = null;
 
   function joinPath(base: string, name: string): string {
     if (base === ".") return name;
@@ -68,7 +54,6 @@
     if (!sftpId) return;
     loading = true;
     error = null;
-    statusMessage = null;
     try {
       entries = await sftpList(sftpId, path);
       currentPath = path;
@@ -113,38 +98,20 @@
     }
   }
 
-  // A native save dialog, not a blob-URL `<a download>` click — the old
-  // approach gave no confirmation of whether anything happened, let alone
-  // where it landed (WebKitGTK/WebView2 both have their own, inconsistent
-  // idea of a "default downloads folder" for a synthetic click like that).
-  // This asks the user exactly where to put it, same as any other desktop
-  // app's download, and the destination is what actually gets shown back.
   async function downloadEntry(entry: SftpDirEntry) {
     if (!sftpId) return;
-    const destination = await saveFileDialog({ defaultPath: entry.name });
-    if (!destination) return; // cancelled
-    downloadingName = entry.name;
-    error = null;
-    statusMessage = null;
     try {
-      await sftpDownloadFile(sftpId, joinPath(currentPath, entry.name), destination);
-      statusMessage = `Saved to ${destination}`;
+      const bytes = await sftpReadFile(sftpId, joinPath(currentPath, entry.name));
+      const blob = new Blob([bytes.buffer as ArrayBuffer]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = entry.name;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (e) {
       error = String(e);
-    } finally {
-      downloadingName = null;
     }
-  }
-
-  function openEntryMenu(event: MouseEvent, entry: SftpDirEntry) {
-    dispatch("openContextMenu", {
-      x: event.clientX,
-      y: event.clientY,
-      items: [
-        ...(entry.isDir ? [] : [{ label: "Download", action: () => downloadEntry(entry) }, { label: "", separator: true }]),
-        { label: "Delete", danger: true, action: () => deleteEntry(entry) },
-      ],
-    });
   }
 
   function triggerUpload() {
@@ -218,8 +185,6 @@
 
   {#if error}
     <p class="error-text">{error}</p>
-  {:else if statusMessage}
-    <p class="status-text">{statusMessage}</p>
   {/if}
 
   <div class="entry-list">
@@ -232,33 +197,22 @@
     {:else}
       {#each entries as entry (entry.name)}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="entry-row"
-          class:dir={entry.isDir}
-          on:dblclick={() => openEntry(entry)}
-          on:contextmenu|preventDefault|stopPropagation={(e) => openEntryMenu(e, entry)}
-        >
+        <div class="entry-row" class:dir={entry.isDir} on:dblclick={() => openEntry(entry)}>
           <span class="entry-icon">{entry.isDir ? "📁" : "📄"}</span>
           <button class="entry-name" on:click={() => openEntry(entry)}>{entry.name}</button>
           <span class="entry-size">{entry.isDir ? "" : formatSize(entry.size)}</span>
           {#if !entry.isDir}
-            {#if downloadingName === entry.name}
-              <span class="entry-action entry-action-spinner" aria-label={`Downloading ${entry.name}`} title={`Downloading ${entry.name}…`}>
-                <RingMark size={12} spinning />
-              </span>
-            {:else}
-              <span
-                class="entry-action"
-                role="button"
-                tabindex="0"
-                aria-label={`Download ${entry.name}`}
-                title={`Download ${entry.name}`}
-                on:click|stopPropagation={() => downloadEntry(entry)}
-                on:keydown|stopPropagation={(e) => e.key === "Enter" && downloadEntry(entry)}
-              >
-                ↓
-              </span>
-            {/if}
+            <span
+              class="entry-action"
+              role="button"
+              tabindex="0"
+              aria-label={`Download ${entry.name}`}
+              title={`Download ${entry.name}`}
+              on:click|stopPropagation={() => downloadEntry(entry)}
+              on:keydown|stopPropagation={(e) => e.key === "Enter" && downloadEntry(entry)}
+            >
+              ↓
+            </span>
           {/if}
           <span
             class="entry-action"
@@ -385,14 +339,6 @@
     font-size: 0.72rem;
     color: var(--status-error);
   }
-  .status-text {
-    margin: 0 var(--space-4) var(--space-3);
-    font-size: 0.72rem;
-    color: var(--fg-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .entry-list {
     flex: 1;
@@ -421,12 +367,6 @@
   .entry-row:hover {
     background: var(--surface-2);
   }
-  /* Only a directory row actually does anything on click/dblclick — a
-     plain file's name doesn't open, so it stays the default cursor rather
-     than a pointer implying it's clickable when it isn't. */
-  .entry-row.dir {
-    cursor: pointer;
-  }
   .entry-icon {
     flex-shrink: 0;
     font-size: 0.85rem;
@@ -439,6 +379,7 @@
     border: none;
     color: var(--fg-primary);
     font-size: 0.76rem;
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -461,23 +402,9 @@
     border-radius: var(--radius-sm);
     line-height: 1;
     opacity: 0;
-    /* A <span role="button">, not a real <button> — it doesn't get a
-       pointer cursor for free the way an actual button element would. */
-    cursor: pointer;
   }
   .entry-row:hover .entry-action {
     opacity: 1;
-  }
-  /* Always visible, not just on hover — the row you started a download
-     from is easy to mouse away from before it finishes, and this is the
-     only feedback that one's still in flight. Not actually clickable
-     (there's nothing to click mid-download), so it keeps the default
-     cursor rather than inheriting .entry-action's pointer. */
-  .entry-action-spinner {
-    opacity: 1;
-    display: flex;
-    align-items: center;
-    cursor: default;
   }
   .entry-action:hover {
     color: var(--fg-primary);
