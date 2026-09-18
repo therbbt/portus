@@ -14,6 +14,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tray::global_shortcut_plugin())
         .manage(AppState::default())
         .manage(SftpState::default())
@@ -23,6 +25,7 @@ pub fn run() {
             commands::session_write,
             commands::session_resize,
             commands::session_close,
+            commands::ssh_trust_host_key,
             commands::get_config,
             commands::save_config,
             commands::list_serial_ports,
@@ -33,11 +36,13 @@ pub fn run() {
             commands::save_group,
             commands::delete_group,
             commands::set_group_collapsed,
+            commands::set_group_slug,
             commands::reorder_session,
             commands::reorder_group,
             commands::sftp_connect,
             commands::sftp_list,
             commands::sftp_read_file,
+            commands::sftp_download_file,
             commands::sftp_write_file,
             commands::sftp_remove_file,
             commands::sftp_create_dir,

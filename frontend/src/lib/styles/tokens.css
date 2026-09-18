@@ -1,16 +1,19 @@
 /*
  * FlashPad-family design tokens.
  *
- * Surfaces and foreground below are the actual "FlashPad Dark" palette (see
- * FlashPad's src/lib/theme/palettes.ts), carried over so Portus reads as a
- * sibling app rather than a different studio's work. The accent is
- * deliberately NOT FlashPad's primary --accent (a blue, used for its own
- * chrome) — it's the teal-green FlashPad itself reaches for on the "search
- * all databases" toggle (Footer.svelte's `.search-scope-btn.active`,
- * `#4dd0c8` / `rgba(77, 208, 200, 0.16)`), which reads as more at home next
- * to a terminal's status/connection language than another blue would.
- * Everything in the app themes off these variables, so a future palette
- * swap is a one-file change.
+ * Surfaces, foreground, and accent below are FlashPad's own "FlashPad Dark"
+ * palette (see FlashPad's src/lib/theme/palettes.ts) verbatim, so Portus
+ * reads as a sibling app rather than a different studio's work. An earlier
+ * version of this file deliberately used a teal (#4dd0c8, FlashPad's own
+ * "search all databases" toggle color) instead of FlashPad's actual blue
+ * --accent, reasoning that a teal read more at home next to a terminal's
+ * status/connection language — that's been dropped in favor of matching
+ * FlashPad directly, including in the ANSI palette below: both --ansi-green
+ * and --ansi-bright-green (what a `user@host` shell prompt renders with by
+ * default, bold or not depending on the desktop session) track --accent
+ * exactly, same as they tracked the old teal before. Everything in the app
+ * themes off these variables, so a future palette swap is a one-file
+ * change.
  */
 :root {
   /* Follows the OS light/dark setting (see the light overrides at the
@@ -38,47 +41,144 @@
      separated primarily by tone and spacing, not borders. */
   --hairline: rgba(255, 255, 255, 0.08);
 
-  /* The one accent. Used for: active tab indicator, focus rings, the
-     connection-status dot, and primary buttons. Nothing else — reach for a
-     second accent color and stop. */
-  --accent: #4dd0c8;
-  --accent-fg: #0a1f1c; /* text/icon color on top of a solid accent fill */
-  --accent-dim: rgba(77, 208, 200, 0.16); /* accent wash, e.g. focus ring halo */
+  /* The one accent. Used for: active tab indicator, focus rings, and
+     primary buttons. Reach for a second accent color and stop. FlashPad
+     Dark's own --accent, verbatim. Deliberately NOT used directly by the
+     connection-status/SSH-indicator color below anymore — see its own
+     note — so that one can be customized (Settings' "App Interface" color
+     group) without dragging buttons and focus rings along with it. */
+  --accent: #5b9bd5;
+  --accent-fg: #0a151f; /* text/icon color on top of a solid accent fill */
+  --accent-dim: rgba(91, 155, 213, 0.16); /* accent wash, e.g. focus ring halo */
 
-  /* Status dot colors — accent doubles as "connected" */
-  --status-connecting: #d7c37a;
+  /* Status dot colors. Connecting reuses the same amber
+     --folder-icon-color below already uses rather than inventing a new
+     hue — orange reads more like "in progress" than the old yellow did,
+     and it's already an established color in the app instead of a new one
+     to learn. --status-connected specifically means "this pane/tab/session
+     is SSH" everywhere it's used (TabStrip.svelte, PaneGrid.svelte,
+     SessionTree/FolderNode's .session-icon.ssh) — a non-SSH connected
+     state always renders plain --fg-secondary instead, so this name is a
+     little generic for what it actually, exclusively does; kept as-is
+     rather than renamed, to avoid a config-breaking field rename in
+     Settings' saved themes (see TerminalColors.sshIndicator in bridge.ts).
+     Defaults to --accent, same identity as before, but customizing it in
+     Settings only overrides this var, not --accent itself. */
+  --status-connecting: #e8a33d;
   --status-connected: var(--accent);
   --status-disconnected: #726f66;
   --status-error: #ef4444;
 
+  /* The sidebar's folder icon (FolderNode.svelte) — previously hardcoded
+     inline, pulled out here specifically so Settings can offer it as a
+     customizable "App Interface" color. Same value --status-connecting
+     already used (see its note above) rather than inventing a new hue. */
+  --folder-icon-color: #e8a33d;
+
+  /* A genuine, dedicated green — deliberately separate from the ANSI
+     palette's green slots below, both of which are intentionally tied to
+     --accent (now blue) so a bold shell prompt's hostname matches the
+     theme. That identity meant every *other* "this is good/positive" use
+     of ANSI green in the terminal colorizer (HTTP 2xx, an executable
+     file's permission bits, a BGP session that's Established, docker ps's
+     "Up") rendered as blue too, which reads as a bug even though it's a
+     direct consequence of a decision made on purpose. Read by
+     Terminal.svelte and pushed into terminalHighlight.ts as a real RGB
+     triple (not a plain ANSI index) specifically so "success" highlights
+     can stay actually green regardless of what the accent happens to be. */
+  --highlight-green: #4dd04d;
+
+  /* Three more dedicated (non-ANSI) colors, same reasoning as
+     --highlight-green above but for a different collision each: an HTTP
+     GET method used to share the cyan slot with IPv4 addresses (both
+     below, --ansi-cyan), a URL used to share the blue slot with MAC
+     addresses (--ansi-blue, underlined to tell them apart, but still
+     literally the same color if either got customized in Settings), and
+     IPv6 used to share that same cyan slot IPv4 now keeps alone. Splitting
+     each pair off to mean exactly one thing let every one of these get its
+     own genuine identity instead of borrowing one.
+     Teal for GET (a hue this palette had no other claim on — see
+     --ansi-bright-blue's directory note for why blue itself was already
+     spoken for) reads as "safe/read-only", consistent with the other HTTP
+     methods' colors below it in intent even though it's no longer a plain
+     ANSI index. Rose for URL, another previously-unclaimed hue in this
+     family, chosen simply to read as clearly different from every other
+     color in this file at a glance. Indigo/violet for IPv6 — the same
+     general hue --ansi-bright-blue's directory color tried and abandoned
+     (see its own note above), free again once that settled on gray
+     instead; sits between --ansi-blue (MAC) and --ansi-magenta (ports)
+     with real separation from both, reading as "IPv4's cousin" rather
+     than an unrelated color, the way IPv6 itself relates to IPv4. */
+  --highlight-get: #2da990;
+  --highlight-url: #d76a98;
+  --highlight-ipv6: #8c72da;
+
   /* Terminal ANSI 16-color palette — Portus's own default, not xterm.js's
      generic built-in one, and coordinated with the accent rather than just
-     borrowing it for one slot: every hue color below (red/green/yellow/
-     blue/magenta/cyan, normal and bright) shares the accent's exact
-     saturation (58%), so the palette reads as one family instead of
-     scattered independent picks. Green is the accent's own hue outright —
-     bright green *is* --accent exactly (#4dd0c8) — since that's the ANSI
-     slot a bold `user@host` shell prompt actually renders with by default,
-     making "the hostname is Portus's accent color" literal, not close.
-     Black/white and their bright counterparts are neutral, tracking the
-     surface/foreground scale instead of a hue. Changing a swatch in
+     borrowing it for one slot: every hue color below (red/yellow/blue/
+     magenta/cyan, normal and bright) shares a common saturation, so the
+     palette reads as one family instead of scattered independent picks.
+     Green — both weights — *is* --accent exactly (#5b9bd5), not just the
+     bright slot: a `user@host` shell prompt renders in bold green (code
+     1;32, the bright slot) on most distros, but plain, unbolded green
+     (code 32, the normal slot) on a desktop session Fedora's prompt script
+     doesn't bold for (anything other than GNOME, e.g. KDE) — so keeping
+     only bright green tied to the accent left the *exact same shell
+     prompt* two different colors depending on which machine's desktop
+     session drew it, defeating the "hostname is the accent" idea entirely.
+     Tying both weights to the same literal accent value fixes that; the
+     cost is that anything else specifically relying on *un-bolded* ANSI
+     green looking traditionally green (e.g. plain, non-bold `git diff`
+     added-line coloring) now renders in accent blue too. Black/white and
+     their bright counterparts are neutral, tracking the surface/foreground
+     scale instead of a hue. Changing a swatch in
      Settings overrides the specific property here (App.svelte's
      applyTerminalColorVars); "Reset to defaults" there must match this
      list exactly — see SettingsPanel.svelte's DEFAULT_COLORS. Terminal.svelte
-     reads all sixteen via getComputedStyle when building xterm.js's theme. */
+     reads all sixteen via getComputedStyle when building xterm.js's theme.
+
+     Blue is lighter than its 58%-saturation siblings at the same nominal
+     "shade" (L=0.4 normal / L=0.559 bright, same as red/green/yellow/
+     magenta/cyan): blue's WCAG luminance weight is tiny (0.0722, vs green's
+     0.7152), so at the siblings' lightness it measured only ~2.2-2.8:1
+     against the terminal background — unreadably dark and muddy, not a
+     contrast problem eyeballing would ever catch. Its lightness was raised
+     (hue held fixed) until it actually clears 4.5:1 (6:1 bright), the same
+     targets the light-mode palette below was built to. The other five hues
+     haven't been re-verified this way yet and may have the same defect.
+
+     --ansi-bright-blue is the exception to that tuned family: it's what a
+     real shell's own `ls --color` sends for a directory listing (code
+     "01;34"), and what the terminal colorizer's own `ls -l` directory-
+     permission color reads too (permissionColor in terminalHighlight.ts) —
+     retargeted to a dedicated neutral gray rather than a blue at all, so a
+     directory reads as the same color everywhere, local or SSH, instead
+     of depending on which shell drew it. Tried a couple of dedicated hues
+     here first (a violet, then a teal) before landing on gray — a
+     directory is the single most common thing colored in ordinary
+     `ls`/`ls -l` output, so giving it its own saturated hue made it the
+     loudest thing on screen precisely where it's the least interesting
+     one; matching --ansi-white/--fg-secondary instead lets it recede the
+     way the type character in a permission string generally should
+     (--fg-tertiary, one step dimmer, was tried first but read as too dark
+     against the near-black dark-mode background), while still reading as
+     a deliberate, distinct color rather than
+     "unstyled." A genuinely dangerous directory (world-writable — see
+     permissionColor in terminalHighlight.ts) still overrides this with a
+     real warning color, so the one case that should pop still does. */
   --ansi-black: #3a3a42;
   --ansi-red: #a1362b;
-  --ansi-green: #2ba19a;
+  --ansi-green: #5b9bd5; /* = --accent, exactly — see the note above on why both weights match */
   --ansi-yellow: #a17e2b;
-  --ansi-blue: #2b5ea1;
+  --ansi-blue: #5d91d4;
   --ansi-magenta: #862ba1;
   --ansi-cyan: #2b86a1;
   --ansi-white: #97958d; /* = --fg-secondary */
   --ansi-bright-black: #726f66; /* = --fg-tertiary */
   --ansi-bright-red: #d05a4d;
-  --ansi-bright-green: #4dd0c8; /* = --accent, exactly — this is what a bold PS1 hostname renders with */
+  --ansi-bright-green: #5b9bd5; /* = --accent, exactly — this is what a bold PS1 hostname renders with */
   --ansi-bright-yellow: #d0a94d;
-  --ansi-bright-blue: #4d86d0;
+  --ansi-bright-blue: #97958d; /* dedicated directory gray, = --fg-secondary/--ansi-white — lighter than --fg-tertiary reads better against the near-black background — see the note above */
   --ansi-bright-magenta: #b14dd0;
   --ansi-bright-cyan: #4db1d0;
   --ansi-bright-white: #ecebe7; /* = --fg-primary */
@@ -123,18 +223,22 @@
 
 /* Light mode — follows the OS setting rather than a manual toggle, since
    there's nowhere in this app that currently needs both available at once.
-   Surfaces/foreground are FlashPad's actual "FlashPad Light" palette (see
-   palettes.ts), same porting approach as the dark palette above. The accent
-   and every ANSI color, though, are NOT simply "the dark values" reused —
-   the dark palette's teal (#4dd0c8) and its 58%-saturation hue family were
-   tuned to read clearly against a near-black background, and have real
-   contrast failures against this light one (the raw accent teal is ~1.8:1
-   against --surface-0 here — nowhere near the ~4.5:1 body text needs).
-   Every hue below is the *same* hue and a close saturation, recalculated at
-   a darker lightness that actually clears 4.5:1 (6:1 for the bold/"bright"
-   set) against both --surface-0 and --surface-2 — verified with the WCAG
-   relative-luminance formula, not eyeballed. Bright green is still the
-   accent exactly, same identity as the dark palette. */
+   Surfaces/foreground/accent are FlashPad's actual "FlashPad Light" palette
+   (see palettes.ts) verbatim, same porting approach as the dark palette
+   above. The ANSI palette, though, is NOT simply "the dark values" reused —
+   the dark palette's hue family was tuned to read clearly against a
+   near-black background, and has real contrast failures against this
+   light one (the dark palette's old teal accent, back when it also stood
+   in for both green slots, measured only ~1.8:1 against --surface-0 here —
+   nowhere near the ~4.5:1 body text needs). Every hue below except green
+   and bright blue is the *same* hue and a close saturation, recalculated
+   at a darker lightness that actually clears 4.5:1 (6:1 for the bold/
+   "bright" set) against both --surface-0 and --surface-2 — verified with
+   the WCAG relative-luminance formula, not eyeballed. Green (both
+   weights) tracks --accent exactly, same identity as the dark palette;
+   bright blue is the dedicated directory gray, = --fg-tertiary here too
+   — see the notes at the dark palette's
+   --ansi-green/--ansi-bright-green/--ansi-bright-blue. */
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
@@ -152,18 +256,23 @@
 
     --hairline: rgba(33, 29, 24, 0.1);
 
-    --accent: #1b746e;
-    --accent-fg: #f4faf9;
-    --accent-dim: rgba(27, 116, 110, 0.14);
+    --accent: #2563eb;
+    --accent-fg: #eef5ff;
+    --accent-dim: rgba(37, 99, 235, 0.14);
 
-    --status-connecting: #8a6d1f;
+    --status-connecting: #8a5a12; /* same amber hue as the dark palette, darkened for contrast here */
     --status-connected: var(--accent);
     --status-disconnected: #8f8579;
     --status-error: #ef4444;
+    --folder-icon-color: #8a5a12; /* same amber hue as --status-connecting here too */
+    --highlight-green: #1e8a1e; /* same hue as the dark palette's, darkened for ~4.7:1 contrast here */
+    --highlight-get: #106554; /* same teal hue as the dark palette's, darkened for contrast here */
+    --highlight-url: #a71b55; /* same rose hue as the dark palette's, darkened for contrast here */
+    --highlight-ipv6: #5f35de; /* same indigo hue as the dark palette's, darkened for contrast here */
 
     --ansi-black: #211d18; /* = --fg-primary */
     --ansi-red: #c03d30;
-    --ansi-green: #1e7671;
+    --ansi-green: #2563eb; /* = --accent, exactly — see the note above on why both weights match */
     --ansi-yellow: #856721;
     --ansi-blue: #2e6bba;
     --ansi-magenta: #a632c8;
@@ -171,9 +280,9 @@
     --ansi-white: #6b6259; /* = --fg-secondary */
     --ansi-bright-black: #8f8579; /* = --fg-tertiary */
     --ansi-bright-red: #a7281b;
-    --ansi-bright-green: #1b746e; /* = --accent, exactly — same identity as the dark palette */
+    --ansi-bright-green: #2563eb; /* = --accent, exactly — same identity as the dark palette */
     --ansi-bright-yellow: #705412;
-    --ansi-bright-blue: #1b56a4;
+    --ansi-bright-blue: #8f8579; /* dedicated directory gray, = --fg-tertiary here too */
     --ansi-bright-magenta: #8e1daf;
     --ansi-bright-cyan: #136076;
     --ansi-bright-white: #e5e0d5; /* = --surface-3 */

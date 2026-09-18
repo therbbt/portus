@@ -43,6 +43,7 @@
     saveGroup,
     deleteGroup,
     setGroupCollapsed,
+    setGroupSlug,
     reorderSession,
     reorderGroup,
   } from "../bridge";
@@ -179,12 +180,16 @@
     document.documentElement.style.setProperty("--font-size-terminal", `${settings.terminalFontSize}px`);
   }
 
-  // Maps each TerminalColors field to the CSS custom property it overrides.
-  // Only the properties an actual per-machine override exists for get
-  // touched — everything else stays at tokens.css's xterm.js-matching
+  // Maps each TerminalColors field to the CSS custom property it overrides
+  // — the 16 standard ANSI slots, the dedicated (non-ANSI) highlight
+  // colors terminalHighlight.ts uses, and — despite this all being under
+  // "TerminalColors" — a full set of the app's own UI chrome colors that
+  // share the same theme (see TerminalColors's own doc comment in
+  // bridge.ts for why). Only the properties an actual per-machine override
+  // exists for get touched — everything else stays at tokens.css's own
   // defaults, and removeProperty() (rather than leaving a stale inline
   // value) is what makes "reset to default" in Settings actually work.
-  const ANSI_COLOR_CSS_VARS: Record<keyof TerminalColors, string> = {
+  const TERMINAL_COLOR_CSS_VARS: Record<keyof TerminalColors, string> = {
     black: "--ansi-black",
     red: "--ansi-red",
     green: "--ansi-green",
@@ -201,11 +206,29 @@
     brightMagenta: "--ansi-bright-magenta",
     brightCyan: "--ansi-bright-cyan",
     brightWhite: "--ansi-bright-white",
+    highlightGreen: "--highlight-green",
+    highlightGet: "--highlight-get",
+    highlightUrl: "--highlight-url",
+    highlightIpv6: "--highlight-ipv6",
+    sidebarBackground: "--surface-1",
+    folderIcon: "--folder-icon-color",
+    sshIndicator: "--status-connected",
+    windowBackground: "--surface-0",
+    panelBackground: "--surface-2",
+    hoverBackground: "--surface-3",
+    activeBackground: "--surface-4",
+    textPrimary: "--fg-primary",
+    textSecondary: "--fg-secondary",
+    textTertiary: "--fg-tertiary",
+    textDisabled: "--fg-disabled",
+    statusConnecting: "--status-connecting",
+    statusDisconnected: "--status-disconnected",
+    statusError: "--status-error",
   };
 
   function applyTerminalColorVars(colors: TerminalColors) {
-    for (const key of Object.keys(ANSI_COLOR_CSS_VARS) as Array<keyof TerminalColors>) {
-      const cssVar = ANSI_COLOR_CSS_VARS[key];
+    for (const key of Object.keys(TERMINAL_COLOR_CSS_VARS) as Array<keyof TerminalColors>) {
+      const cssVar = TERMINAL_COLOR_CSS_VARS[key];
       const value = colors[key];
       if (value) {
         document.documentElement.style.setProperty(cssVar, value);
@@ -237,13 +260,13 @@
     showSettingsPanel = true;
   }
 
-  async function onSaveSettings(detail: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors }) {
+  async function onSaveSettings(detail: PortusConfig["settings"]) {
     showSettingsPanel = false;
     const next: PortusConfig = config ?? {
       schemaVersion: 3,
       groups: [],
       sessions,
-      settings: { terminalFontFamily: "JetBrains Mono", terminalFontSize: 14, terminalColors: {} },
+      settings: { terminalFontFamily: "JetBrains Mono", terminalFontSize: 14, terminalColors: {}, themes: [], activeThemeId: null },
     };
     next.settings = detail;
     await saveConfig(next);
@@ -253,6 +276,33 @@
     // Pushes the new font/colors into every already-open terminal too, not
     // just ones opened from here on.
     terminalAppearanceVersion.update((n) => n + 1);
+  }
+
+  // The nearest ancestor folder's slug for a pane's saved session, walking
+  // up past any unslugged folder in between (a session directly inside an
+  // unslugged subfolder of a slugged parent still shows the parent's
+  // slug) — see TabStrip.svelte, which appends it after a tab's title.
+  // `null` for a pane with no saved session (a plain shell tab) or one
+  // whose folder chain never hits a slug. `sessions`/`groups` are taken as
+  // parameters, not closed over, specifically so the call site below stays
+  // a plain reactive template expression Svelte can actually see the
+  // dependency on — a closure here would read the same live values, but
+  // Svelte's dependency tracking only looks at what's syntactically
+  // referenced in the expression itself, not what a called function
+  // happens to close over, so setting a folder's slug (which only
+  // reassigns `groups`) would never be noticed as a reason to recompute
+  // this, and the tab strip would just silently keep showing stale slugs.
+  function folderSlugForPane(pane: PaneState | undefined, sessions: SavedSession[], groups: Group[]): string | null {
+    if (!pane?.savedSessionId) return null;
+    const session = sessions.find((s) => s.id === pane.savedSessionId);
+    let groupId = session?.groupId ?? null;
+    while (groupId) {
+      const group = groups.find((g) => g.id === groupId);
+      if (!group) return null;
+      if (group.slug) return group.slug;
+      groupId = group.parentId ?? null;
+    }
+    return null;
   }
 
   function createPane(protocol: Protocol, title: string, options: SessionOptions, savedSessionId?: string, shellNumber?: number): string {
@@ -441,6 +491,11 @@
     await setGroupCollapsed(group.id, collapsed);
   }
 
+  async function onSetFolderSlug(id: string, slug: string | null) {
+    groups = groups.map((g) => (g.id === id ? { ...g, slug } : g));
+    await setGroupSlug(id, slug);
+  }
+
   async function onReorderSession(detail: { id: string; groupId: string | null; sortOrder: number }) {
     const result = await reorderSession(detail.id, detail.groupId, detail.sortOrder);
     sessions = result.sessions;
@@ -465,10 +520,10 @@
         username: session.username ?? "",
         auth,
       };
-      openTab("ssh", session.name, options);
+      openTab("ssh", session.name, options, session.id);
     } else if (session.protocol === "serial") {
       const options: SerialConnectOptions = { portName: session.address, baudRate: session.baudRate ?? undefined };
-      openTab("serial", session.name, options);
+      openTab("serial", session.name, options, session.id);
     } else if (session.protocol === "shell") {
       const options: ShellConnectOptions = {
         shellCommand: session.shellCommand ?? null,
@@ -483,7 +538,7 @@
         username: session.username ?? "",
         password: secret ?? "",
       };
-      openTab("rdp", session.name, options);
+      openTab("rdp", session.name, options, session.id);
     }
   }
 
@@ -644,12 +699,17 @@
     {/if}
     <div class="action-bar-main">
       <TabStrip
-        tabs={tabs.map((t) => ({ id: t.id, title: t.title, state: panes[t.activePaneId]?.state ?? "disconnected" }))}
+        tabs={tabs.map((t) => ({
+          id: t.id,
+          title: t.title,
+          state: panes[t.activePaneId]?.state ?? "disconnected",
+          protocol: panes[t.activePaneId]?.protocol,
+          folderSlug: folderSlugForPane(panes[t.activePaneId], sessions, groups),
+        }))}
         activeId={activeTabId}
         on:select={(e) => selectTab(e.detail.id)}
         on:close={(e) => closeTab(e.detail.id)}
         on:rename={(e) => onRename(e.detail.id, e.detail.title)}
-        on:new={newShellTab}
         on:saveAs={(e) => onSaveTabAsSession(e.detail.id)}
         on:openContextMenu={(e) => (contextMenu = e.detail)}
       />
@@ -669,6 +729,7 @@
         on:editSession={(e) => onEditSession(e.detail)}
         on:createFolder={(e) => onCreateFolder(e.detail.name)}
         on:renameFolder={(e) => onRenameFolder(e.detail.id, e.detail.name)}
+        on:setFolderSlug={(e) => onSetFolderSlug(e.detail.id, e.detail.slug)}
         on:deleteFolder={(e) => onDeleteFolder(e.detail)}
         on:toggleFolder={(e) => onToggleFolder(e.detail)}
         on:reorderSession={(e) => onReorderSession(e.detail)}
@@ -781,13 +842,15 @@
       options={activeSshOptions}
       title={activePane.title}
       on:close={() => (showSftpPanel = false)}
+      on:openContextMenu={(e) => (contextMenu = e.detail)}
     />
   {/if}
   {#if showSettingsPanel && config}
     <SettingsPanel
       terminalFontFamily={config.settings.terminalFontFamily}
       terminalFontSize={config.settings.terminalFontSize}
-      terminalColors={config.settings.terminalColors}
+      themes={config.settings.themes}
+      activeThemeId={config.settings.activeThemeId}
       onCheckForUpdate={checkForUpdateManually}
       on:save={(e) => onSaveSettings(e.detail)}
       on:cancel={() => (showSettingsPanel = false)}

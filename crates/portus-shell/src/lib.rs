@@ -65,6 +65,17 @@ impl Session for ShellSession {
 
         let shell = self.options.shell_command.clone().unwrap_or_else(default_shell);
         let mut cmd = CommandBuilder::new(shell);
+        // `CommandBuilder` sets no TERM of its own — left unset, the child
+        // shell inherits whatever TERM (if any) portus's own GUI process
+        // happens to have, which for an app not launched from a terminal
+        // is typically nothing meaningful. An SSH session doesn't have
+        // this problem: it explicitly negotiates "xterm-256color" via
+        // `request_pty` (see portus-ssh). Without the same value here,
+        // programs that check $TERM before deciding whether to colorize —
+        // a shell's own prompt script, `ls --color`, `git`, `less`, ncurses
+        // apps — can behave differently in a local tab than over SSH for
+        // reasons that have nothing to do with the program itself.
+        cmd.env("TERM", "xterm-256color");
         if let Some(args) = &self.options.shell_args {
             cmd.args(args);
         }
