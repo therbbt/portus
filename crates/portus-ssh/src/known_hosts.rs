@@ -39,6 +39,17 @@ pub enum Verdict {
     Mismatch,
 }
 
+/// Force-overwrites (or inserts) the stored key for `host_id`, regardless of
+/// what's currently on record. The only way to recover from a
+/// `Verdict::Mismatch` short of editing the JSON file by hand — callers must
+/// have gotten explicit user confirmation first, since this trusts blindly.
+pub fn trust(host_id: &str, key_base64: &str) {
+    let path = path();
+    let mut entries = load(&path);
+    entries.insert(host_id.to_string(), key_base64.to_string());
+    save(&path, &entries);
+}
+
 pub fn verify(host_id: &str, presented_key_base64: &str) -> Verdict {
     let path = path();
     let mut entries = load(&path);

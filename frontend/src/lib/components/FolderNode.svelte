@@ -22,6 +22,9 @@
     startRenameFolder(group: Group): void;
     commitRenameFolder(id: string, name: string): void;
     cancelRenameFolder(): void;
+    startEditSlug(group: Group): void;
+    commitSlug(id: string, slug: string): void;
+    cancelSlug(): void;
     connect(session: SavedSession): void;
     openSessionMenu(event: MouseEvent, session: SavedSession): void;
     startDragSession(event: DragEvent, session: SavedSession): void;
@@ -45,6 +48,7 @@
   export let allSessions: SavedSession[];
   export let depth: number;
   export let renamingGroupId: string | null;
+  export let editingSlugGroupId: string | null;
   export let draggingSessionId: string | null;
   export let draggingGroupId: string | null;
   export let dropTarget: DropTarget | null;
@@ -54,6 +58,9 @@
 
   let renameValue = group.name;
   $: if (renamingGroupId === group.id) renameValue = group.name;
+
+  let slugValue = group.slug ?? "";
+  $: if (editingSlugGroupId === group.id) slugValue = group.slug ?? "";
 
   $: childEntries = mergeEntries(allGroups, allSessions, group.id);
 
@@ -112,6 +119,35 @@
       {group.name}
     </span>
   {/if}
+  {#if editingSlugGroupId === group.id}
+    <input
+      class="slug-input"
+      bind:value={slugValue}
+      placeholder="slug"
+      use:focusAndSelect
+      on:click|stopPropagation
+      on:keydown|stopPropagation={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          actions.commitSlug(group.id, slugValue);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          actions.cancelSlug();
+        }
+      }}
+      on:blur={() => actions.commitSlug(group.id, slugValue)}
+    />
+  {:else if group.slug}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <span
+      class="folder-slug"
+      title="Shown as a - [{group.slug}] suffix on tabs opened from sessions in this folder"
+      on:click|stopPropagation={() => actions.startEditSlug(group)}
+    >
+      [{group.slug}]
+    </span>
+  {/if}
 </li>
 {#if !group.collapsed}
   {#each childEntries as entry (entry.item.id)}
@@ -122,6 +158,7 @@
         {allSessions}
         depth={depth + 1}
         {renamingGroupId}
+        {editingSlugGroupId}
         {draggingSessionId}
         {draggingGroupId}
         {dropTarget}
@@ -145,7 +182,7 @@
         on:contextmenu|preventDefault|stopPropagation={(e) => actions.openSessionMenu(e, entry.item)}
       >
         <button class="session-main" title={`${protocolLabel[entry.item.protocol]} · ${entry.item.address}`} on:click={() => actions.connect(entry.item)}>
-          <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="session-icon" class:ssh={entry.item.protocol === "ssh"} width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
             <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
             <path d="M4.5 6.5L7 9L4.5 11.5" />
             <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
@@ -202,6 +239,12 @@
     flex-shrink: 0;
     color: var(--fg-secondary);
   }
+  /* --status-connected, not --accent directly — this is the same "this is
+     SSH" identity TabStrip/PaneGrid's own connected-dot uses (defaults to
+     --accent, but can be customized in Settings independently of it). */
+  .session-icon.ssh {
+    color: var(--status-connected);
+  }
   .session-name {
     flex: 1;
     min-width: 0;
@@ -238,7 +281,7 @@
   }
   .folder-icon {
     flex-shrink: 0;
-    color: #e8a33d;
+    color: var(--folder-icon-color);
   }
   .folder-name {
     flex: 1;
@@ -271,6 +314,30 @@
     padding: 0 0.2rem;
   }
   .rename-input:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+  .folder-slug {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    color: var(--fg-tertiary);
+    cursor: pointer;
+  }
+  .folder-slug:hover {
+    color: var(--fg-primary);
+  }
+  .slug-input {
+    flex-shrink: 0;
+    width: 5rem;
+    font-size: 0.7rem;
+    font-family: inherit;
+    background: transparent;
+    color: var(--fg-primary);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 0 0.2rem;
+  }
+  .slug-input:focus-visible {
     outline: none;
     box-shadow: none;
   }

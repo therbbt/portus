@@ -9,6 +9,7 @@
 mod known_hosts;
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -41,6 +42,15 @@ fn default_port() -> u16 {
     22
 }
 
+/// Overwrites the stored host key for `host_id` ("host:port") with
+/// `key_base64` so a subsequent [`connect`] to it succeeds instead of
+/// hitting `Verdict::Mismatch` again. The frontend calls this only after the
+/// user has explicitly confirmed the new key (e.g. via the host-key-changed
+/// prompt) — it trusts blindly, with no verification of its own.
+pub fn trust_host_key(host_id: &str, key_base64: &str) {
+    known_hosts::trust(host_id, key_base64);
+}
+
 /// Connects and authenticates, verifying the host key via the TOFU
 /// known-hosts store along the way. `events`, if given, gets a colored
 /// inline notice for a first-seen host key — pass `None` when there's no
@@ -53,7 +63,17 @@ pub async fn connect(
     let rejection_reason = Arc::new(Mutex::new(None));
     let handler = HostKeyVerifier { host_id, events, rejection_reason: rejection_reason.clone() };
 
-    let config = Arc::new(client::Config::default());
+    // russh's default Config sends no keepalive at all (`keepalive_interval:
+    // None`) and has no inactivity timeout either — over a connection that's
+    // gone silently dead (a dropped VPN tunnel, a NAT entry expiring) there
+    // is then nothing to notice the remote side is gone until the OS's own
+    // TCP retransmission timeout eventually gives up, which can take
+    // minutes. Until then every read and write just sits there waiting,
+    // which looks exactly like the terminal "lagging" rather than a
+    // connection that's actually failed. A keepalive makes that a ~45s
+    // wait (3 missed probes at 15s each, both russh defaults we keep) with
+    // a real disconnect at the end of it instead of an indefinite hang.
+    let config = Arc::new(client::Config { keepalive_interval: Some(Duration::from_secs(15)), ..Default::default() });
     let mut handle = client::connect(config, (options.host.as_str(), options.port), handler)
         .await
         .map_err(|e| {
@@ -239,15 +259,19 @@ impl client::Handler for HostKeyVerifier {
                 Ok(true)
             }
             known_hosts::Verdict::Mismatch => {
+                let fingerprint = server_public_key.fingerprint().to_string();
                 let msg = format!(
-                    "SSH host key for {} has changed (fingerprint now SHA256:{}) — refusing to connect, possible MITM",
+                    "SSH host key for {} has changed (fingerprint now SHA256:{fingerprint}) — refusing to connect, possible MITM",
                     self.host_id,
-                    server_public_key.fingerprint()
                 );
                 tracing::warn!("{msg}");
-                *self.rejection_reason.lock().expect("poisoned") = Some(msg.clone());
+                *self.rejection_reason.lock().expect("poisoned") = Some(msg);
                 if let Some(events) = &self.events {
-                    let _ = events.send(SessionEvent::Error { message: msg });
+                    let _ = events.send(SessionEvent::HostKeyMismatch {
+                        host_id: self.host_id.clone(),
+                        fingerprint,
+                        key_base64: presented,
+                    });
                 }
                 Ok(false)
             }

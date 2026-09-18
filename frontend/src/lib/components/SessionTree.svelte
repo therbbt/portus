@@ -16,6 +16,7 @@
     toggleFolder: Group;
     createFolder: { name: string };
     renameFolder: { id: string; name: string };
+    setFolderSlug: { id: string; slug: string | null };
     deleteFolder: Group;
     // The menu itself renders from App.svelte, same as every other overlay
     // in this app (connect dialogs, Settings) — a fixed-position popup
@@ -88,6 +89,29 @@
     renamingGroupId = null;
   }
 
+  // A short tag (e.g. "PROD") shown as a `- [SLUG]` suffix on any tab
+  // opened from a session nested under this folder — see TabStrip.svelte
+  // and App.svelte's folderSlugForPane. Separate editing state from
+  // rename above (a folder can be mid-rename and mid-slug-edit only one
+  // at a time in practice, but they're independent concepts, not a single
+  // "which field of this folder is being edited" enum).
+  let editingSlugGroupId: string | null = null;
+
+  function startEditSlug(group: Group) {
+    editingSlugGroupId = group.id;
+  }
+
+  function commitSlug(id: string, slug: string) {
+    if (editingSlugGroupId !== id) return;
+    editingSlugGroupId = null;
+    const trimmed = slug.trim();
+    dispatch("setFolderSlug", { id, slug: trimmed || null });
+  }
+
+  function cancelSlug() {
+    editingSlugGroupId = null;
+  }
+
   function focusAndSelect(node: HTMLInputElement) {
     node.focus();
     node.select();
@@ -109,6 +133,8 @@
         { label: "New folder", action: startCreateFolder },
         { label: "", separator: true },
         { label: "Rename", action: () => startRenameFolder(group) },
+        { label: group.slug ? "Edit slug…" : "Set slug…", action: () => startEditSlug(group) },
+        { label: "", separator: true },
         { label: "Delete", danger: true, action: () => dispatch("deleteFolder", group) },
       ],
     });
@@ -268,6 +294,9 @@
     startRenameFolder,
     commitRenameFolder,
     cancelRenameFolder,
+    startEditSlug,
+    commitSlug,
+    cancelSlug,
     connect: (session) => dispatch("connect", session),
     openSessionMenu,
     startDragSession,
@@ -331,6 +360,7 @@
             allSessions={sessions}
             depth={0}
             {renamingGroupId}
+            {editingSlugGroupId}
             draggingSessionId={draggingSession?.id ?? null}
             draggingGroupId={draggingGroup?.id ?? null}
             {dropTarget}
@@ -353,7 +383,7 @@
             on:contextmenu|preventDefault|stopPropagation={(e) => openSessionMenu(e, entry.item)}
           >
             <button class="session-main" title={`${protocolLabel[entry.item.protocol]} · ${entry.item.address}`} on:click={() => dispatch("connect", entry.item)}>
-              <svg class="session-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+              <svg class="session-icon" class:ssh={entry.item.protocol === "ssh"} width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
                 <path d="M4.5 6.5L7 9L4.5 11.5" />
                 <line x1="8.5" y1="11.5" x2="11.5" y2="11.5" />
@@ -452,6 +482,12 @@
   .session-icon {
     flex-shrink: 0;
     color: var(--fg-secondary);
+  }
+  /* --status-connected, not --accent directly — this is the same "this is
+     SSH" identity TabStrip/PaneGrid's own connected-dot uses (defaults to
+     --accent, but can be customized in Settings independently of it). */
+  .session-icon.ssh {
+    color: var(--status-connected);
   }
   .session-name {
     flex: 1;

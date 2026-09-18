@@ -15,7 +15,12 @@ export type SessionEvent =
   | { type: "title_changed"; title: string }
   | { type: "state_changed"; state: SessionState }
   | { type: "closed"; reason: string | null }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** The server's SSH host key doesn't match what Portus last recorded for
+   * this host — a legitimate key rotation (server rebuilt) or an active
+   * MITM look identical from here. The connection has already been
+   * refused; `trustHostKey` is the only way to proceed. */
+  | { type: "host_key_mismatch"; hostId: string; fingerprint: string; keyBase64: string };
 
 export type SshAuth =
   | { type: "password"; password: string }
@@ -54,12 +59,31 @@ export interface ShellConnectOptions {
 
 export type SessionOptions = SshConnectOptions | SerialConnectOptions | RdpConnectOptions | ShellConnectOptions | undefined;
 
-/** `savedSessionId` is set only when this tab is opening a saved session —
- * it's what unlocks scrollback persistence for a saved shell preset on the
- * backend (see portus_core::scrollback). An ad-hoc tab has no stable
- * identity to persist scrollback under, so it's omitted for those. */
-export async function openSession(protocol: Protocol, options?: SessionOptions, savedSessionId?: string): Promise<string> {
-  return invoke<string>("session_open", { protocol, options: options ?? null, savedSessionId: savedSessionId ?? null });
+/** The caller generates `sessionId` itself (see `newSessionId`) and must
+ * subscribe to it (`subscribeSession`) *before* calling this — the backend
+ * starts emitting `Connecting`/`Connected` the instant this command spawns
+ * the session's task, and a local shell reaches `Connected` fast enough
+ * that subscribing only after this resolved routinely missed it, leaving
+ * its tab's status dot stuck on "connecting" forever (an SSH session's
+ * slower handshake almost always won that race, which is why only local
+ * shell tabs showed it). `savedSessionId` is set only when this tab is
+ * opening a saved session — it's what unlocks scrollback persistence for a
+ * saved shell preset on the backend (see portus_core::scrollback). An
+ * ad-hoc tab has no stable identity to persist scrollback under, so it's
+ * omitted for those. */
+export async function openSession(
+  sessionId: string,
+  protocol: Protocol,
+  options?: SessionOptions,
+  savedSessionId?: string,
+): Promise<void> {
+  await invoke("session_open", { sessionId, protocol, options: options ?? null, savedSessionId: savedSessionId ?? null });
+}
+
+/** A session id the caller mints itself, before the session exists on the
+ * backend at all — see `openSession` for why that ordering is required. */
+export function newSessionId(): string {
+  return crypto.randomUUID();
 }
 
 export async function listSerialPorts(): Promise<string[]> {
@@ -113,12 +137,23 @@ export interface Group {
   collapsed: boolean;
   /** Position among siblings sharing the same parentId — see reorderGroup(). */
   sortOrder: number;
+  /** A short, user-set tag (e.g. "PROD") shown as a `- [SLUG]` suffix
+   * after a tab's title for any saved session nested under this folder —
+   * see TabStrip.svelte, which walks up to the *nearest* ancestor folder
+   * that has one set. `undefined`/`null` means no suffix. */
+  slug?: string | null;
 }
 
-/** Per-machine ANSI palette overrides — every field optional, `undefined`
- * meaning "use xterm.js's own default for that color" (see tokens.css's
- * --ansi-* custom properties, which hold those defaults verbatim). Hex
- * strings like "#8ae234", produced by <input type="color">. */
+/** Per-machine color overrides — every field optional, `undefined` meaning
+ * "use the default for that color" (see tokens.css's matching custom
+ * properties, which hold those defaults verbatim). Hex strings like
+ * "#8ae234", produced by <input type="color">. Mostly the 16-slot ANSI
+ * terminal palette plus a few dedicated (non-ANSI) highlight colors, but
+ * also — despite the name — a full set of the app's own UI chrome colors
+ * (windowBackground through statusError below, Settings' "App Interface"
+ * group): they live in the same theme so one saved theme covers both
+ * what a terminal's text looks like and how the app chrome around it
+ * looks, rather than needing two separate systems. */
 export interface TerminalColors {
   black?: string | null;
   red?: string | null;
@@ -136,13 +171,94 @@ export interface TerminalColors {
   brightMagenta?: string | null;
   brightCyan?: string | null;
   brightWhite?: string | null;
+  /** Not one of the 16 ANSI slots — overrides `--highlight-green`, the
+   * dedicated "success" color terminalHighlight.ts's own rules use (HTTP
+   * 2xx, an executable file's permission bits, a BGP session that's
+   * Established, ...), independent of whatever `brightGreen` (which
+   * tracks the accent, see tokens.css) happens to be. */
+  highlightGreen?: string | null;
+  /** Overrides `--highlight-get`, an HTTP GET request's own color —
+   * independent of `cyan`, which is IP addresses' alone. */
+  highlightGet?: string | null;
+  /** Overrides `--highlight-url`, a URL's own color — independent of
+   * `blue`, which is MAC addresses' alone. */
+  highlightUrl?: string | null;
+  /** Overrides `--highlight-ipv6`, an IPv6 address's own color —
+   * independent of `cyan`, which is IPv4 addresses' alone. */
+  highlightIpv6?: string | null;
+  /** Not a terminal color at all — overrides `--surface-1`, the sidebar
+   * rail's background (also shared by the top action bar, the same
+   * visual zone). */
+  sidebarBackground?: string | null;
+  /** Overrides `--folder-icon-color`, the sidebar's folder icon —
+   * separate from `brightBlue`, which colors a directory's *name* inside
+   * a terminal, not this icon. */
+  folderIcon?: string | null;
+  /** Overrides `--status-connected`, the color that marks a tab/pane/
+   * session as SSH specifically — separate from the app's one `--accent`,
+   * so this can be customized without also changing buttons, focus rings,
+   * and the active tab indicator. */
+  sshIndicator?: string | null;
+  /** Overrides `--surface-0`, the app's outermost background — behind the
+   * sidebar, tab strip, and every panel. */
+  windowBackground?: string | null;
+  /** Overrides `--surface-2` — raised panels: the tab strip itself,
+   * dropdown menus, overlays. */
+  panelBackground?: string | null;
+  /** Overrides `--surface-3` — the hover state for sidebar rows, tabs,
+   * and similar list items. */
+  hoverBackground?: string | null;
+  /** Overrides `--surface-4` — the active tab and a pressed button. */
+  activeBackground?: string | null;
+  /** Overrides `--fg-primary`, the app's main text color. */
+  textPrimary?: string | null;
+  /** Overrides `--fg-secondary`, muted text — session names, field labels. */
+  textSecondary?: string | null;
+  /** Overrides `--fg-tertiary`, the dimmest text — hints, secondary
+   * labels, section titles. */
+  textTertiary?: string | null;
+  /** Overrides `--fg-disabled`, text on a disabled control. */
+  textDisabled?: string | null;
+  /** Overrides `--status-connecting`, the status dot/text while a
+   * session is still connecting. */
+  statusConnecting?: string | null;
+  /** Overrides `--status-disconnected`, the status dot for a closed
+   * session. */
+  statusDisconnected?: string | null;
+  /** Overrides `--status-error`, the status dot/text for a failed
+   * session. */
+  statusError?: string | null;
+}
+
+/** A saved, named terminal color scheme — the full swatch set exactly as
+ * `TerminalColors` describes it, just under a name so it can be picked
+ * back out of a list later instead of being the one always-active set of
+ * overrides. `terminalColors` (below) is still what's actually applied to
+ * every terminal at any given moment; a theme only ever *feeds* that when
+ * explicitly picked in Settings, it doesn't get read from live. */
+export interface Theme {
+  id: string;
+  name: string;
+  colors: TerminalColors;
 }
 
 export interface PortusConfig {
   schemaVersion: number;
   groups: Group[];
   sessions: SavedSession[];
-  settings: { terminalFontFamily: string; terminalFontSize: number; terminalColors: TerminalColors };
+  settings: {
+    terminalFontFamily: string;
+    terminalFontSize: number;
+    terminalColors: TerminalColors;
+    themes: Theme[];
+    /** Which saved theme (by id) Settings last loaded into terminalColors
+     * — purely so re-opening Settings shows the right dropdown selection.
+     * `null` means Default (there's no "Custom" state — colors are always
+     * either Default's, fixed, or a real saved theme's). Never read by
+     * anything that renders a terminal — terminalColors alone still
+     * governs that. */
+    activeThemeId: string | null;
+  };
 }
 
 export async function getConfig(): Promise<PortusConfig> {
@@ -214,6 +330,11 @@ export async function setGroupCollapsed(groupId: string, collapsed: boolean): Pr
   return invoke<PortusConfig>("set_group_collapsed", { groupId, collapsed });
 }
 
+/** `slug: null` clears it. See `Group.slug`'s own doc comment. */
+export async function setGroupSlug(groupId: string, slug: string | null): Promise<PortusConfig> {
+  return invoke<PortusConfig>("set_group_slug", { groupId, slug });
+}
+
 /** Drag-and-drop in the sidebar: reparents a folder (or moves it to the
  * root, if `parentId` is `null`) and/or repositions it among its new
  * siblings — see reorderSession(). */
@@ -240,6 +361,13 @@ export async function closeSession(sessionId: string): Promise<void> {
   await invoke("session_close", { sessionId });
 }
 
+/** Overwrites the stored SSH host key for `hostId` ("host:port") with
+ * `keyBase64` — call only after the user has explicitly confirmed a
+ * `host_key_mismatch` event is expected, then retry `openSession`. */
+export async function trustHostKey(hostId: string, keyBase64: string): Promise<void> {
+  await invoke("ssh_trust_host_key", { hostId, keyBase64 });
+}
+
 // --- SFTP --------------------------------------------------------------
 // A file panel, not a terminal session — plain request/response calls
 // rather than the session bridge's event stream. Runs over its own SSH
@@ -262,6 +390,14 @@ export async function sftpList(id: string, path: string): Promise<SftpDirEntry[]
 export async function sftpReadFile(id: string, path: string): Promise<Uint8Array> {
   const bytes = await invoke<number[]>("sftp_read_file", { id, path });
   return new Uint8Array(bytes);
+}
+
+/** Streams the remote file straight to `localPath` server-side, rather
+ * than round-tripping the whole thing through JS as `sftpReadFile` does —
+ * `localPath` should come from a native save dialog (see SftpPanel.svelte),
+ * not be typed by hand. */
+export async function sftpDownloadFile(id: string, path: string, localPath: string): Promise<void> {
+  await invoke("sftp_download_file", { id, path, localPath });
 }
 
 export async function sftpWriteFile(id: string, path: string, data: Uint8Array): Promise<void> {
@@ -340,6 +476,7 @@ export async function subscribeSession(
     ["state", (p) => p as SessionEvent],
     ["closed", (p) => p as SessionEvent],
     ["error", (p) => p as SessionEvent],
+    ["host_key_mismatch", (p) => p as SessionEvent],
   ];
 
   const unlistens: UnlistenFn[] = await Promise.all(

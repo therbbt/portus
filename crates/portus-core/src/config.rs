@@ -51,6 +51,12 @@ pub struct Group {
     /// plain integer index would.
     #[serde(default)]
     pub sort_order: f64,
+    /// A short, user-set tag (e.g. "PROD") shown as a `- [SLUG]` suffix
+    /// after a tab's title for any saved session nested under this
+    /// folder — see TabStrip.svelte, which walks up to the *nearest*
+    /// ancestor folder that has one set. `None`/unset means no suffix.
+    #[serde(default)]
+    pub slug: Option<String>,
 }
 
 /// A saved, reusable session profile — an SSH/RDP/serial target or a local
@@ -134,6 +140,17 @@ impl AuthMethod {
     }
 }
 
+/// A saved, named terminal color scheme — see the matching `Theme` doc
+/// comment in bridge.ts for why this is separate from `terminal_colors`
+/// (the one set that's actually live) rather than replacing it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Theme {
+    pub id: String,
+    pub name: String,
+    pub colors: TerminalColors,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -143,6 +160,10 @@ pub struct Settings {
     pub terminal_font_size: u16,
     #[serde(default)]
     pub terminal_colors: TerminalColors,
+    #[serde(default)]
+    pub themes: Vec<Theme>,
+    #[serde(default)]
+    pub active_theme_id: Option<String>,
 }
 
 impl Default for Settings {
@@ -151,17 +172,24 @@ impl Default for Settings {
             terminal_font_family: default_font_family(),
             terminal_font_size: default_font_size(),
             terminal_colors: TerminalColors::default(),
+            themes: Vec::new(),
+            active_theme_id: None,
         }
     }
 }
 
-/// Per-machine overrides for the terminal's 16-color ANSI palette — never
-/// synced anywhere, just read out of this machine's own config.json. Every
-/// field is `None` by default, meaning "use xterm.js's own default for that
-/// color" (the frontend only sets the corresponding CSS custom property
-/// when a field here is actually `Some`, so an untouched config changes
-/// nothing about how the terminal looks). Hex strings (e.g. "#8ae234"),
-/// validated frontend-side by `<input type="color">`.
+/// Per-machine color overrides — never synced anywhere, just read out of
+/// this machine's own config.json. Every field is `None` by default,
+/// meaning "use the default for that color" (the frontend only sets the
+/// corresponding CSS custom property when a field here is actually
+/// `Some`, so an untouched config changes nothing). Hex strings (e.g.
+/// "#8ae234"), validated frontend-side by `<input type="color">`. Mostly
+/// the 16-slot ANSI terminal palette plus a few dedicated (non-ANSI)
+/// highlight colors, but also — despite the name — a full set of the
+/// app's own UI chrome colors (window_background through status_error
+/// below, Settings' "App Interface" group): they live in the same theme
+/// so one saved theme covers both a terminal's text and the app chrome
+/// around it, rather than needing two separate systems.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalColors {
@@ -197,6 +225,82 @@ pub struct TerminalColors {
     pub bright_cyan: Option<String>,
     #[serde(default)]
     pub bright_white: Option<String>,
+    /// Not one of the 16 ANSI slots — this overrides `--highlight-green`,
+    /// the dedicated "success" color terminalHighlight.ts's own rules use
+    /// (HTTP 2xx, an executable file's permission bits, a BGP session
+    /// that's Established, ...), independent of whatever `bright_green`
+    /// (which tracks the accent, see tokens.css) happens to be.
+    #[serde(default)]
+    pub highlight_green: Option<String>,
+    /// Overrides `--highlight-get`, an HTTP GET request's own color —
+    /// independent of `cyan`, which is IP addresses' alone.
+    #[serde(default)]
+    pub highlight_get: Option<String>,
+    /// Overrides `--highlight-url`, a URL's own color — independent of
+    /// `blue`, which is MAC addresses' alone.
+    #[serde(default)]
+    pub highlight_url: Option<String>,
+    /// Overrides `--highlight-ipv6`, an IPv6 address's own color —
+    /// independent of `cyan`, which is IPv4 addresses' alone.
+    #[serde(default)]
+    pub highlight_ipv6: Option<String>,
+    /// Not a terminal color at all — overrides `--surface-1`, the sidebar
+    /// rail's background (also shared by the top action bar, the same
+    /// visual zone).
+    #[serde(default)]
+    pub sidebar_background: Option<String>,
+    /// Overrides `--folder-icon-color`, the sidebar's folder icon —
+    /// separate from `bright_blue`, which colors a directory's *name*
+    /// inside a terminal, not this icon.
+    #[serde(default)]
+    pub folder_icon: Option<String>,
+    /// Overrides `--status-connected`, the color that marks a tab/pane/
+    /// session as SSH specifically — separate from the app's one accent,
+    /// so this can be customized without also changing buttons, focus
+    /// rings, and the active tab indicator.
+    #[serde(default)]
+    pub ssh_indicator: Option<String>,
+    /// Overrides `--surface-0`, the app's outermost background — behind
+    /// the sidebar, tab strip, and every panel.
+    #[serde(default)]
+    pub window_background: Option<String>,
+    /// Overrides `--surface-2` — raised panels: the tab strip itself,
+    /// dropdown menus, overlays.
+    #[serde(default)]
+    pub panel_background: Option<String>,
+    /// Overrides `--surface-3` — the hover state for sidebar rows, tabs,
+    /// and similar list items.
+    #[serde(default)]
+    pub hover_background: Option<String>,
+    /// Overrides `--surface-4` — the active tab and a pressed button.
+    #[serde(default)]
+    pub active_background: Option<String>,
+    /// Overrides `--fg-primary`, the app's main text color.
+    #[serde(default)]
+    pub text_primary: Option<String>,
+    /// Overrides `--fg-secondary`, muted text — session names, field
+    /// labels.
+    #[serde(default)]
+    pub text_secondary: Option<String>,
+    /// Overrides `--fg-tertiary`, the dimmest text — hints, secondary
+    /// labels, section titles.
+    #[serde(default)]
+    pub text_tertiary: Option<String>,
+    /// Overrides `--fg-disabled`, text on a disabled control.
+    #[serde(default)]
+    pub text_disabled: Option<String>,
+    /// Overrides `--status-connecting`, the status dot/text while a
+    /// session is still connecting.
+    #[serde(default)]
+    pub status_connecting: Option<String>,
+    /// Overrides `--status-disconnected`, the status dot for a closed
+    /// session.
+    #[serde(default)]
+    pub status_disconnected: Option<String>,
+    /// Overrides `--status-error`, the status dot/text for a failed
+    /// session.
+    #[serde(default)]
+    pub status_error: Option<String>,
 }
 
 /// The CSS generic `monospace` keyword, not a specific font name — it
@@ -234,6 +338,18 @@ pub fn config_path() -> Result<PathBuf, ConfigError> {
     Ok(config_dir()?.join("config.json"))
 }
 
+/// Serializes every `load` + mutate + `save` round trip a command performs
+/// (see the app crate's `commands.rs`: save_session/save_group/etc.) into
+/// one critical section — callers must hold it for the *entire* sequence,
+/// never just around `load` or just around `save`. Without it, two such
+/// round trips racing — two rapid UI actions, a saved-session save landing
+/// mid-drag-reorder, or just two `#[test]`s in the same binary running on
+/// separate threads, as this project's own integration tests do — silently
+/// lose whichever one's `save` finishes first: it read a config already
+/// stale by the time it wrote, discarding the other's change with no error
+/// or warning to show for it.
+pub static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub fn load() -> Result<Config, ConfigError> {
     let path = config_path()?;
     if !path.exists() {
@@ -253,7 +369,21 @@ pub fn save(config: &Config) -> Result<(), ConfigError> {
         std::fs::create_dir_all(parent)?;
     }
     let json = serde_json::to_string_pretty(config)?;
-    std::fs::write(path, json)?;
+    // Write-then-rename rather than a direct `fs::write`: a plain write is a
+    // separate truncate + write syscall, so two saves racing (e.g. two
+    // near-simultaneous UI actions, or two app windows open at once) can
+    // interleave and leave the shorter write's tail end overwritten by
+    // nothing, with stale bytes from the longer write still sitting after
+    // it — that malformed leftover then fails every future `load()`,
+    // silently breaking all further saves. `rename` on the same filesystem
+    // is atomic, but only protects a *single* writer's transition to the
+    // new content — a shared tmp path would just move the same race one
+    // file over, so each save gets its own uniquely-named tmp file and only
+    // the rename is contended (whichever save's rename lands last simply
+    // wins outright, in full, rather than interleaving byte-for-byte).
+    let tmp_path = path.with_extension(format!("json.{}.tmp", Uuid::new_v4()));
+    std::fs::write(&tmp_path, json)?;
+    std::fs::rename(&tmp_path, &path)?;
     Ok(())
 }
 

@@ -38,6 +38,13 @@ pub enum SessionEvent {
     Closed { reason: Option<String> },
     /// A non-fatal error the UI should surface (e.g. auth prompt failure).
     Error { message: String },
+    /// The server's SSH host key doesn't match what Portus last recorded for
+    /// this host — could be a legitimate key rotation (e.g. the server was
+    /// rebuilt) or an active MITM. The connection is refused either way;
+    /// this only gives the UI what it needs to offer trusting the new key
+    /// and retrying, on explicit user confirmation.
+    #[serde(rename_all = "camelCase")]
+    HostKeyMismatch { host_id: String, fingerprint: String, key_base64: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
