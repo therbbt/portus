@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import TitleBar from "./TitleBar.svelte";
   import ResizeHandles from "./ResizeHandles.svelte";
   import SessionTree from "./SessionTree.svelte";
@@ -99,6 +100,27 @@
   let editingShellSession: SavedSession | null = null;
   let sidebarWidth = 260;
   const SIDEBAR_VISIBLE_KEY = "portus.sidebarVisible";
+
+  // True while the window is maximized, fullscreen, or WM-snapped to a
+  // screen half — see TitleBar.svelte's updateSquared for the detection.
+  let titleBarSquared = false;
+  // Windows only, set once at startup (see platform_name in main.rs).
+  // WebView2's transparent-window compositing doesn't blend cleanly with
+  // DWM there — instead of a soft shadow it shows a solid-looking gap with
+  // a hard edge, so tauri.windows.conf.json turns transparency off for
+  // that platform and this keeps the frontend's shell flush with the
+  // (now opaque) window to match, the same as a squared/maximized window.
+  let isWindows = false;
+  $: windowSquared = titleBarSquared || isWindows;
+  // The shell's shadow margin is a CSS custom property (inherited by every
+  // overlay/dialog's own `inset`, not just .app-shell — see tokens.css)
+  // rather than a class-scoped value, since dialogs render as App.svelte
+  // siblings outside .app-shell and wouldn't otherwise see a scoped one.
+  // Squaring off collapses it to 0 so nothing leaves a gap against a
+  // maximized/snapped window's true edges.
+  $: if (typeof document !== "undefined") {
+    document.documentElement.style.setProperty("--window-shadow-margin", windowSquared ? "0px" : "1px");
+  }
   // Defaults true (visible) - only an explicit "false" ever written by
   // toggleSidebar() below should hide it on next launch.
   let sidebarVisible = typeof window === "undefined" ? true : window.localStorage.getItem(SIDEBAR_VISIBLE_KEY) !== "false";
@@ -254,6 +276,8 @@
     newShellTab();
 
     void checkForAppUpdate();
+
+    isWindows = (await invoke<string>("platform_name").catch(() => "unknown")) === "windows";
   });
 
   function openSettingsPanel() {
@@ -675,11 +699,12 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="app-shell">
-  <ResizeHandles />
+<div class="app-shell" class:squared={windowSquared}>
+  <ResizeHandles squared={windowSquared} />
   <TitleBar
     splitDisabled={!activeTab}
     sidebarHidden={!sidebarVisible}
+    bind:squared={titleBarSquared}
     on:toggleSidebar={toggleSidebar}
     on:splitRow={() => splitActivePane("row")}
     on:splitColumn={() => splitActivePane("column")}
@@ -883,6 +908,14 @@
     border-radius: var(--radius-lg);
     overflow: hidden;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  }
+  /* Flush against the screen edges (maximized, fullscreen, or WM-snapped —
+     see TitleBar.svelte's updateSquared) reads wrong with floating rounded
+     corners/shadow, so both collapse to nothing while windowSquared is
+     true — same treatment FlashPad uses for its window shell. */
+  .app-shell.squared {
+    border-radius: 0;
+    box-shadow: none;
   }
   /* One continuous bar spanning the full window, like FlashPad's
      ActionToolbar — the sidebar label and the tab strip used to be two

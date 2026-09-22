@@ -449,6 +449,16 @@ pub fn rdp_disconnect(id: String, state: State<'_, RdpState>) -> Result<(), Stri
     Ok(())
 }
 
+/// Used by the frontend to skip the floating rounded-corner/shadow window
+/// treatment on Windows, where WebView2's transparent-window compositing
+/// doesn't blend cleanly with DWM and shows a broken-looking solid gap
+/// instead of a soft shadow (see tauri.windows.conf.json, which turns
+/// window transparency off to match).
+#[tauri::command]
+pub fn platform_name() -> &'static str {
+    std::env::consts::OS
+}
+
 fn emit_rdp_event(app: &AppHandle, id: &str, event: &RdpEvent) {
     let kind = match event {
         RdpEvent::Connected { .. } => "connected",

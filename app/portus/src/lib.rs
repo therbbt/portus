@@ -50,6 +50,7 @@ pub fn run() {
             commands::sftp_disconnect,
             commands::rdp_connect,
             commands::rdp_disconnect,
+            commands::platform_name,
         ])
         .setup(|app| {
             tray::setup(app)?;
