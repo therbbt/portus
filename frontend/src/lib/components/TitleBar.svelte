@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "./AppIcon.svelte";
   import SplitMenu from "./SplitMenu.svelte";
 
@@ -32,37 +33,55 @@
   // to count as "flush" - a couple px of slack for WM/compositor rounding.
   const EDGE_TOLERANCE = 3;
 
+  // Wayland gives clients no way to query their own absolute screen
+  // position - appWindow.outerPosition() reads GTK state that stays frozen
+  // under the Wayland backend instead of tracking the real compositor
+  // placement, so the edge-touching tile-snap heuristic below would read a
+  // stale position parked at (0, 0) and misfire as squared essentially all
+  // the time. Resolved once at startup; only isMaximized() (which Wayland
+  // *does* report correctly) drives `squared` there - X11 keeps the full
+  // tile-snap detection since position tracking works normally on it.
+  let wayland = false;
+
   async function updateSquared() {
-    // currentMonitor() is a module-level function (there's no Window#
-    // method for it) - it still reports the monitor of whichever window
-    // this script is running in, which is exactly `appWindow` here.
-    const { currentMonitor } = await import("@tauri-apps/api/window");
-    const [maximized, monitor, position, size] = await Promise.all([
-      appWindow.isMaximized(),
-      currentMonitor(),
-      appWindow.outerPosition(),
-      appWindow.outerSize(),
-    ]);
-    isMaximized = maximized;
-    if (!monitor) {
-      squared = maximized;
-      return;
+    try {
+      const maximized = await appWindow.isMaximized();
+      isMaximized = maximized;
+      if (wayland) {
+        squared = maximized;
+        return;
+      }
+      // currentMonitor() is a module-level function (there's no Window#
+      // method for it) - it still reports the monitor of whichever window
+      // this script is running in, which is exactly `appWindow` here.
+      const { currentMonitor } = await import("@tauri-apps/api/window");
+      const [monitor, position, size] = await Promise.all([currentMonitor(), appWindow.outerPosition(), appWindow.outerSize()]);
+      if (!monitor) {
+        squared = maximized;
+        return;
+      }
+      // A WM-driven tile (half-screen snap, or one quadrant of a 2x2 grid of
+      // windows) isn't reported as "maximized", but it does sit flush against
+      // at least one horizontal AND one vertical screen edge - e.g. a
+      // top-left quarter tile touches the top and left edges even though it
+      // covers neither the full width nor the full height. A window free-
+      // floating in the middle of the screen touches neither axis, so it
+      // keeps its rounded corners/shadow as normal.
+      const touchesLeft = position.x <= monitor.position.x + EDGE_TOLERANCE;
+      const touchesRight = position.x + size.width >= monitor.position.x + monitor.size.width - EDGE_TOLERANCE;
+      const touchesTop = position.y <= monitor.position.y + EDGE_TOLERANCE;
+      const touchesBottom = position.y + size.height >= monitor.position.y + monitor.size.height - EDGE_TOLERANCE;
+      squared = maximized || ((touchesLeft || touchesRight) && (touchesTop || touchesBottom));
+    } catch {
+      // Position/monitor queries can reject outright on some platforms -
+      // fall back to whatever isMaximized() last resolved rather than
+      // leaving `squared` stuck on a stale value.
+      squared = isMaximized;
     }
-    // A WM-driven tile (half-screen snap, or one quadrant of a 2x2 grid of
-    // windows) isn't reported as "maximized", but it does sit flush against
-    // at least one horizontal AND one vertical screen edge - e.g. a
-    // top-left quarter tile touches the top and left edges even though it
-    // covers neither the full width nor the full height. A window free-
-    // floating in the middle of the screen touches neither axis, so it
-    // keeps its rounded corners/shadow as normal.
-    const touchesLeft = position.x <= monitor.position.x + EDGE_TOLERANCE;
-    const touchesRight = position.x + size.width >= monitor.position.x + monitor.size.width - EDGE_TOLERANCE;
-    const touchesTop = position.y <= monitor.position.y + EDGE_TOLERANCE;
-    const touchesBottom = position.y + size.height >= monitor.position.y + monitor.size.height - EDGE_TOLERANCE;
-    squared = maximized || ((touchesLeft || touchesRight) && (touchesTop || touchesBottom));
   }
 
   onMount(async () => {
+    wayland = await invoke<boolean>("is_wayland_session").catch(() => false);
     await updateSquared();
     unlistenResize = await appWindow.onResized(() => void updateSquared());
     unlistenMove = await appWindow.onMoved(() => void updateSquared());
