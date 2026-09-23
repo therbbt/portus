@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { onMount, onDestroy, createEventDispatcher } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { invoke } from "@tauri-apps/api/core";
   import AppIcon from "./AppIcon.svelte";
   import SplitMenu from "./SplitMenu.svelte";
 
@@ -9,6 +10,11 @@
   /** Drives the Sidebar button's pressed look — App.svelte owns the actual
    * visible/hidden state, this just reflects it. */
   export let sidebarHidden = false;
+  // Rounded corners + drop shadow read as "floating" when the window is
+  // free-floating, but look wrong once it's flush against the screen edges
+  // (maximized, fullscreen, or snapped to one half via the WM's own
+  // tiling) - App.svelte squares the shell's corners off while this is true.
+  export let squared = false;
 
   const appWindow = getCurrentWindow();
   const dispatch = createEventDispatcher<{
@@ -18,6 +24,73 @@
     showShortcuts: void;
     showSettings: void;
   }>();
+
+  let isMaximized = false;
+  let unlistenResize: (() => void) | undefined;
+  let unlistenMove: (() => void) | undefined;
+
+  // How close (in physical px) an edge has to be to the monitor's own edge
+  // to count as "flush" - a couple px of slack for WM/compositor rounding.
+  const EDGE_TOLERANCE = 3;
+
+  // Wayland gives clients no way to query their own absolute screen
+  // position - appWindow.outerPosition() reads GTK state that stays frozen
+  // under the Wayland backend instead of tracking the real compositor
+  // placement, so the edge-touching tile-snap heuristic below would read a
+  // stale position parked at (0, 0) and misfire as squared essentially all
+  // the time. Resolved once at startup; only isMaximized() (which Wayland
+  // *does* report correctly) drives `squared` there - X11 keeps the full
+  // tile-snap detection since position tracking works normally on it.
+  let wayland = false;
+
+  async function updateSquared() {
+    try {
+      const maximized = await appWindow.isMaximized();
+      isMaximized = maximized;
+      if (wayland) {
+        squared = maximized;
+        return;
+      }
+      // currentMonitor() is a module-level function (there's no Window#
+      // method for it) - it still reports the monitor of whichever window
+      // this script is running in, which is exactly `appWindow` here.
+      const { currentMonitor } = await import("@tauri-apps/api/window");
+      const [monitor, position, size] = await Promise.all([currentMonitor(), appWindow.outerPosition(), appWindow.outerSize()]);
+      if (!monitor) {
+        squared = maximized;
+        return;
+      }
+      // A WM-driven tile (half-screen snap, or one quadrant of a 2x2 grid of
+      // windows) isn't reported as "maximized", but it does sit flush against
+      // at least one horizontal AND one vertical screen edge - e.g. a
+      // top-left quarter tile touches the top and left edges even though it
+      // covers neither the full width nor the full height. A window free-
+      // floating in the middle of the screen touches neither axis, so it
+      // keeps its rounded corners/shadow as normal.
+      const touchesLeft = position.x <= monitor.position.x + EDGE_TOLERANCE;
+      const touchesRight = position.x + size.width >= monitor.position.x + monitor.size.width - EDGE_TOLERANCE;
+      const touchesTop = position.y <= monitor.position.y + EDGE_TOLERANCE;
+      const touchesBottom = position.y + size.height >= monitor.position.y + monitor.size.height - EDGE_TOLERANCE;
+      squared = maximized || ((touchesLeft || touchesRight) && (touchesTop || touchesBottom));
+    } catch {
+      // Position/monitor queries can reject outright on some platforms -
+      // fall back to whatever isMaximized() last resolved rather than
+      // leaving `squared` stuck on a stale value.
+      squared = isMaximized;
+    }
+  }
+
+  onMount(async () => {
+    wayland = await invoke<boolean>("is_wayland_session").catch(() => false);
+    await updateSquared();
+    unlistenResize = await appWindow.onResized(() => void updateSquared());
+    unlistenMove = await appWindow.onMoved(() => void updateSquared());
+  });
+
+  onDestroy(() => {
+    unlistenResize?.();
+    unlistenMove?.();
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

@@ -449,6 +449,28 @@ pub fn rdp_disconnect(id: String, state: State<'_, RdpState>) -> Result<(), Stri
     Ok(())
 }
 
+/// Used by the frontend to skip the floating rounded-corner/shadow window
+/// treatment on Windows, where WebView2's transparent-window compositing
+/// doesn't blend cleanly with DWM and shows a broken-looking solid gap
+/// instead of a soft shadow (see tauri.windows.conf.json, which turns
+/// window transparency off to match).
+#[tauri::command]
+pub fn platform_name() -> &'static str {
+    std::env::consts::OS
+}
+
+/// Wayland gives a client no way to query its own absolute screen position
+/// (unlike X11) - tao's outer_position()/currentMonitor() math the frontend
+/// uses to detect a WM half-screen/quadrant tile snap reads GTK's
+/// root_origin()/frame_extents(), which stay frozen under the Wayland
+/// backend rather than tracking the real compositor placement. TitleBar.svelte
+/// uses this to skip that unreliable heuristic there and fall back to just
+/// isMaximized(), which Wayland does report correctly.
+#[tauri::command]
+pub fn is_wayland_session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
 fn emit_rdp_event(app: &AppHandle, id: &str, event: &RdpEvent) {
     let kind = match event {
         RdpEvent::Connected { .. } => "connected",
