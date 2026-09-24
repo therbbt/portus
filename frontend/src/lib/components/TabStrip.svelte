@@ -11,17 +11,22 @@
     close: { id: string };
     rename: { id: string; title: string };
     saveAs: { id: string };
+    reconnect: { id: string };
     // The menu itself renders from App.svelte, same as every other overlay
     // in this app - a fixed-position popup shouldn't be nested inside a
     // flex-item component's own render tree.
     openContextMenu: { x: number; y: number; items: ContextMenuItem[] };
   }>();
 
-  function openTabMenu(event: MouseEvent, tab: { id: string; title: string }) {
+  function openTabMenu(event: MouseEvent, tab: { id: string; title: string; state: SessionState }) {
     dispatch("openContextMenu", {
       x: event.clientX,
       y: event.clientY,
       items: [
+        // Only offered once the session has actually dropped - a live
+        // connection has nothing to reconnect, and reconnecting mid-connect
+        // would just race the connection attempt already in flight.
+        ...(tab.state === "disconnected" ? [{ label: "Reconnect", action: () => dispatch("reconnect", { id: tab.id }) }] : []),
         { label: "Save as session…", action: () => dispatch("saveAs", { id: tab.id }) },
         { label: "", separator: true },
         { label: "Close", action: () => dispatch("close", { id: tab.id }) },

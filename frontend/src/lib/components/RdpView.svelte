@@ -61,7 +61,18 @@
     }
   }
 
-  onMount(async () => {
+  /** Re-runs the same connect steps `onMount` performs originally, reusing
+   * the same canvas/container - exported so PaneGrid can call it on a
+   * specific pane's RdpView instance from the tab strip's right-click
+   * "Reconnect" (see App.svelte). Unlike Terminal.svelte's session_open,
+   * there's no backend-emitted "connecting" state for RDP to pick this up
+   * automatically, so `state` is dispatched explicitly here. */
+  export async function reconnect() {
+    await sub?.unlisten();
+    sub = null;
+    status = "connecting";
+    statusMessage = "";
+    dispatch("state", "connecting");
     try {
       rdpId = await rdpConnect(options);
       sub = await subscribeRdp(rdpId, handleEvent);
@@ -70,7 +81,9 @@
       statusMessage = String(e);
       dispatch("state", "disconnected");
     }
-  });
+  }
+
+  onMount(reconnect);
 
   onDestroy(() => {
     void sub?.unlisten();
