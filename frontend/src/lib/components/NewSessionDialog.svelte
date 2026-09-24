@@ -262,7 +262,7 @@
       <label class="field grow">
         <span>Host</span>
         <!-- svelte-ignore a11y_autofocus -->
-        <input type="text" bind:value={sshHost} placeholder="example.com" autofocus />
+        <input type="text" bind:value={sshHost} placeholder="example.com" autocomplete="off" autofocus />
       </label>
       <label class="field narrow">
         <span>Port</span>
@@ -272,7 +272,7 @@
 
     <label class="field">
       <span>Username</span>
-      <input type="text" bind:value={sshUsername} placeholder="root" />
+      <input type="text" bind:value={sshUsername} placeholder="root" autocomplete="off" />
     </label>
 
     <div class="type-toggle" role="tablist" aria-label="Authentication method">
@@ -287,16 +287,24 @@
     {#if sshAuthMethod === "password"}
       <label class="field">
         <span>Password</span>
-        <input type="password" bind:value={sshPassword} />
+        <!-- autocomplete="new-password" (not "current-password") tells the
+             webview this is a fresh credential for a distinct saved session,
+             not a login to fill in — without it, WebKitGTK's own autofill
+             (entirely separate from this app's OS-keychain storage) can
+             silently offer/substitute whatever password was last typed into
+             an identically-shaped field in this same dialog, since none of
+             these inputs otherwise carry anything distinguishing one saved
+             session's form from another's. -->
+        <input type="password" bind:value={sshPassword} autocomplete="new-password" />
       </label>
     {:else}
       <label class="field">
         <span>Key path</span>
-        <input type="text" bind:value={sshKeyPath} placeholder="~/.ssh/id_ed25519" />
+        <input type="text" bind:value={sshKeyPath} placeholder="~/.ssh/id_ed25519" autocomplete="off" />
       </label>
       <label class="field">
         <span>Passphrase (optional)</span>
-        <input type="password" bind:value={sshPassphrase} />
+        <input type="password" bind:value={sshPassphrase} autocomplete="new-password" />
       </label>
     {/if}
   {:else if activeType === "rdp"}
@@ -304,7 +312,7 @@
       <label class="field grow">
         <span>Host</span>
         <!-- svelte-ignore a11y_autofocus -->
-        <input type="text" bind:value={rdpHost} placeholder="example.com" autofocus />
+        <input type="text" bind:value={rdpHost} placeholder="example.com" autocomplete="off" autofocus />
       </label>
       <label class="field narrow">
         <span>Port</span>
@@ -314,12 +322,12 @@
 
     <label class="field">
       <span>Username</span>
-      <input type="text" bind:value={rdpUsername} placeholder="Administrator" />
+      <input type="text" bind:value={rdpUsername} placeholder="Administrator" autocomplete="off" />
     </label>
 
     <label class="field">
       <span>Password</span>
-      <input type="password" bind:value={rdpPassword} />
+      <input type="password" bind:value={rdpPassword} autocomplete="new-password" />
     </label>
 
     <label class="field">
