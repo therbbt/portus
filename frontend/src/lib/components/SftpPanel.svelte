@@ -1,12 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from "svelte";
-  import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+  import { save as saveFileDialog, open as openFileDialog } from "@tauri-apps/plugin-dialog";
   import type { SshConnectOptions, SftpDirEntry } from "../bridge";
   import {
     sftpConnect,
     sftpList,
     sftpDownloadFile,
-    sftpWriteFile,
+    sftpUploadFile,
     sftpRemoveFile,
     sftpCreateDir,
     sftpRemoveDir,
@@ -31,7 +31,6 @@
   let entries: SftpDirEntry[] = [];
   let loading = true;
   let error: string | null = null;
-  let fileInput: HTMLInputElement;
   let newFolderOpen = false;
   let newFolderName = "";
   // Which entry (if any) is mid-download — swaps that row's ↓ icon for a
@@ -39,6 +38,11 @@
   // `<a download>` click, silently dropped wherever the webview felt like
   // rather than the destination the user actually picked).
   let downloadingName: string | null = null;
+  // Name of whichever file is mid-upload, swapping the toolbar's Upload
+  // button for a spinner — same reasoning as downloadingName above, just
+  // toolbar-level since an in-progress upload has no existing remote row of
+  // its own to attach a spinner to yet.
+  let uploadingName: string | null = null;
   let statusMessage: string | null = null;
 
   function joinPath(base: string, name: string): string {
@@ -147,22 +151,30 @@
     });
   }
 
-  function triggerUpload() {
-    fileInput?.click();
-  }
-
-  async function handleFileInputChange() {
-    if (!sftpId || !fileInput.files) return;
+  // A native open-file dialog, not `<input type="file">` — the input's
+  // `File` object only offers `.arrayBuffer()`, which means reading the
+  // *whole file* into the webview's JS heap before anything is sent
+  // anywhere. This asks for real filesystem paths instead, which lets Rust
+  // stream straight from disk to the remote file (see sftpUploadFile) - the
+  // fix for uploads exhausting memory on anything multi-GB.
+  async function uploadFiles() {
+    if (!sftpId) return;
+    const selected = await openFileDialog({ multiple: true });
+    if (!selected) return; // cancelled
+    const paths = Array.isArray(selected) ? selected : [selected];
+    error = null;
+    statusMessage = null;
     try {
-      for (const file of Array.from(fileInput.files)) {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        await sftpWriteFile(sftpId, joinPath(currentPath, file.name), bytes);
+      for (const localPath of paths) {
+        const name = localPath.split(/[/\\]/).pop() ?? localPath;
+        uploadingName = name;
+        await sftpUploadFile(sftpId, localPath, joinPath(currentPath, name));
       }
       await load(currentPath);
     } catch (e) {
       error = String(e);
     } finally {
-      fileInput.value = "";
+      uploadingName = null;
     }
   }
 
@@ -194,14 +206,14 @@
     </button>
     <span class="path">{currentPath === "." ? "~" : currentPath}</span>
     <button class="toolbar-btn" on:click={() => (newFolderOpen = !newFolderOpen)}>+ Folder</button>
-    <button class="toolbar-btn" on:click={triggerUpload}>↥ Upload</button>
-    <input
-      bind:this={fileInput}
-      type="file"
-      multiple
-      class="hidden-input"
-      on:change={handleFileInputChange}
-    />
+    {#if uploadingName}
+      <span class="toolbar-btn toolbar-status" aria-label={`Uploading ${uploadingName}`} title={`Uploading ${uploadingName}…`}>
+        <RingMark size={12} spinning />
+        Uploading {uploadingName}…
+      </span>
+    {:else}
+      <button class="toolbar-btn" on:click={uploadFiles}>↥ Upload</button>
+    {/if}
   </div>
 
   {#if newFolderOpen}
@@ -361,8 +373,12 @@
     color: var(--fg-disabled);
     cursor: not-allowed;
   }
-  .hidden-input {
-    display: none;
+  .toolbar-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: default;
+    color: var(--fg-secondary);
   }
 
   .new-folder-row {
