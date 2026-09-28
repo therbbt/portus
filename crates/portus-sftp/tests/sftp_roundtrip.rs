@@ -38,7 +38,10 @@ async fn sftp_round_trips_a_directory_and_a_file() {
     assert!(before.is_empty(), "freshly created dir should be empty, got {before:?}");
 
     let file_path = format!("{dir}/hello.txt");
-    sftp.write_file(&file_path, b"PORTUS_SFTP_OK").await.expect("write_file failed");
+    let local_path = std::env::temp_dir().join(format!("portus-sftp-test-upload-{}", uuid_like()));
+    std::fs::write(&local_path, b"PORTUS_SFTP_OK").expect("write local temp file failed");
+    sftp.upload_from_file(&local_path, &file_path).await.expect("upload_from_file failed");
+    std::fs::remove_file(&local_path).ok();
 
     let listed = sftp.list(&dir).await.expect("list (with file) failed");
     assert_eq!(listed.len(), 1, "expected exactly one entry, got {listed:?}");

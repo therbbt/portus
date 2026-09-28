@@ -86,10 +86,19 @@ impl SftpClient {
         Ok(())
     }
 
-    pub async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), SftpError> {
-        let mut file = self.session.create(path).await?;
-        file.write_all(data).await?;
-        file.shutdown().await?;
+    /// Streams straight from a local file to the remote one, the upload
+    /// mirror of `download_to_file` above — same reasoning applies in
+    /// reverse. A byte-array upload used to buffer the whole file into a
+    /// `Vec<u8>` here and, worse, cross the Tauri IPC bridge as a JS
+    /// `Array.from(Uint8Array)` on the frontend side first, which alone
+    /// multiplies a file that size several times over (every byte becomes
+    /// its own boxed JS number) before Rust ever sees it — that's what was
+    /// actually exhausting memory on a multi-GB upload, not this end.
+    pub async fn upload_from_file(&self, local_path: &std::path::Path, remote_path: &str) -> Result<(), SftpError> {
+        let mut local_file = tokio::fs::File::open(local_path).await?;
+        let mut remote_file = self.session.create(remote_path).await?;
+        tokio::io::copy(&mut local_file, &mut remote_file).await?;
+        remote_file.shutdown().await?;
         Ok(())
     }
 

@@ -400,8 +400,16 @@ export async function sftpDownloadFile(id: string, path: string, localPath: stri
   await invoke("sftp_download_file", { id, path, localPath });
 }
 
-export async function sftpWriteFile(id: string, path: string, data: Uint8Array): Promise<void> {
-  await invoke("sftp_write_file", { id, path, data: Array.from(data) });
+/** Streams straight from `localPath` to the remote file server-side, rather
+ * than reading the whole thing into JS and sending it over as
+ * `Array.from(Uint8Array)` — that conversion alone (every byte becomes its
+ * own boxed JS number) is what exhausted memory on a multi-GB upload before
+ * the data even reached Rust. `localPath` comes from the native open-file
+ * dialog (see SftpPanel.svelte), not a `<input type="file">`'s `File`
+ * object, since that's what actually gets Rust a real filesystem path to
+ * stream from instead of file contents already loaded into the webview. */
+export async function sftpUploadFile(id: string, localPath: string, path: string): Promise<void> {
+  await invoke("sftp_upload_file", { id, localPath, path });
 }
 
 export async function sftpRemoveFile(id: string, path: string): Promise<void> {

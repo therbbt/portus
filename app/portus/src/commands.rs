@@ -377,14 +377,16 @@ pub async fn sftp_read_file(id: String, path: String, state: State<'_, SftpState
     state.get(&id)?.read_file(&path).await.map_err(|e| e.to_string())
 }
 
+/// `local_path` comes from the frontend's native open-file dialog (see
+/// SftpPanel.svelte), not typed by hand or read into JS first — same reason
+/// `sftp_download_file` below takes a `local_path` instead of a byte array.
 #[tauri::command]
-pub async fn sftp_write_file(
-    id: String,
-    path: String,
-    data: Vec<u8>,
-    state: State<'_, SftpState>,
-) -> Result<(), String> {
-    state.get(&id)?.write_file(&path, &data).await.map_err(|e| e.to_string())
+pub async fn sftp_upload_file(id: String, local_path: String, path: String, state: State<'_, SftpState>) -> Result<(), String> {
+    state
+        .get(&id)?
+        .upload_from_file(std::path::Path::new(&local_path), &path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// `local_path` comes from the frontend's native save dialog (see
