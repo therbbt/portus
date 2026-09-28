@@ -99,6 +99,10 @@
   let editingSerialSession: SavedSession | null = null;
   let editingShellSession: SavedSession | null = null;
   let sidebarWidth = 260;
+  // Keyed by tab id, one live PaneGrid instance per open tab (inactive tabs
+  // stay mounted, just hidden - see the .tab-panes each-block below) - only
+  // used to reach reconnectTab's target pane, never read reactively.
+  let paneGridRefs: Record<string, PaneGrid> = {};
   const SIDEBAR_VISIBLE_KEY = "portus.sidebarVisible";
 
   // True while the window is maximized, fullscreen, or WM-snapped to a
@@ -370,10 +374,6 @@
 
   function resizeSplit(tabId: string, splitId: string, sizes: number[]) {
     tabs = tabs.map((t) => (t.id === tabId ? { ...t, layout: updateSplitSizes(t.layout, splitId, sizes) } : t));
-  }
-
-  function findTabIdForPane(paneId: string): string | null {
-    return tabs.find((t) => collectPaneIds(t.layout).includes(paneId))?.id ?? null;
   }
 
   /** Closing a tab's last remaining pane closes the tab itself — same
@@ -659,21 +659,28 @@
     tabs = tabs.map((t) => (t.id === id ? { ...t, title: trimmed, renamed: true } : t));
   }
 
+  // Never auto-closes the pane/tab, whether the session never got past
+  // "connecting" (bad host, wrong credentials, unreachable server) or it
+  // connected fine and later dropped (network blip, remote reset) — either
+  // way, closing it here would hide the error Terminal.svelte just wrote
+  // into the pane before there's any chance to read it, and would remove
+  // the tab the user needs to right-click "Reconnect" on (see reconnectTab
+  // below). The user closes it manually when they're done with it, same as
+  // any other tab.
   function onPaneClosed(paneId: string) {
     const pane = panes[paneId];
-    // A session that never got past "connecting" failed outright — bad
-    // host, wrong credentials, unreachable server. Auto-closing here would
-    // hide the error Terminal.svelte just wrote into the pane before
-    // there's any chance to read it, so leave it open (flipping the dot to
-    // "disconnected" so it doesn't look stuck) and let the user close it
-    // manually instead. A session that did connect and later disconnects
-    // still auto-closes, unchanged.
-    if (pane && pane.state === "connecting") {
-      panes = { ...panes, [paneId]: { ...pane, state: "disconnected" } };
-      return;
-    }
-    const tabId = findTabIdForPane(paneId);
-    if (tabId) closePane(tabId, paneId);
+    if (!pane) return;
+    panes = { ...panes, [paneId]: { ...pane, state: "disconnected" } };
+  }
+
+  /** Tab strip's right-click "Reconnect", offered only while a tab's active
+   * pane shows "disconnected" (see TabStrip.svelte). Delegates to that
+   * pane's live Terminal/RdpView instance, which reconnects in place —
+   * same terminal/canvas, fresh session — rather than opening a new tab. */
+  function reconnectTab(tabId: string) {
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    paneGridRefs[tabId]?.reconnectPane(tab.activePaneId);
   }
 
   function toggleSftpPanel() {
@@ -736,6 +743,7 @@
         on:close={(e) => closeTab(e.detail.id)}
         on:rename={(e) => onRename(e.detail.id, e.detail.title)}
         on:saveAs={(e) => onSaveTabAsSession(e.detail.id)}
+        on:reconnect={(e) => reconnectTab(e.detail.id)}
         on:openContextMenu={(e) => (contextMenu = e.detail)}
       />
       {#if activePane?.protocol === "ssh"}
@@ -768,6 +776,7 @@
         {#each tabs as tab (tab.id)}
           <div class="tab-panes" class:hidden={tab.id !== activeTabId}>
             <PaneGrid
+              bind:this={paneGridRefs[tab.id]}
               node={tab.layout}
               {panes}
               activePaneId={tab.activePaneId}

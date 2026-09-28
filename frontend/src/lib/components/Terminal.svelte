@@ -166,6 +166,11 @@
         dispatch("title", { title: event.title });
         break;
       case "closed":
+        // Guards term.onData/onResize below against writing to a session
+        // that's already gone while the pane sits disconnected waiting for
+        // the user to reconnect it - reconnect() below replaces this with a
+        // fresh id when that happens, same as it always has.
+        sessionId = null;
         dispatch("closed", { reason: event.reason });
         break;
       case "error":
@@ -179,8 +184,10 @@
 
   /** Re-runs the same connect steps `onMount` performed originally — safe to
    * repeat because `term.onData`/`onResize` below close over `sessionId` by
-   * reference, so they pick up the new id without being re-registered. */
-  async function reconnect() {
+   * reference, so they pick up the new id without being re-registered.
+   * Exported so PaneGrid can call it on a specific pane's Terminal instance
+   * from the tab strip's right-click "Reconnect" — see App.svelte. */
+  export async function reconnect() {
     await sub?.unlisten();
     decoder = new TextDecoder();
     sessionId = newSessionId();

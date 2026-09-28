@@ -27,6 +27,19 @@
 
   let containerEl: HTMLDivElement | undefined;
 
+  // Keyed by paneId, not tied to the paneRects/{#each} identity below - only
+  // used to reach a specific pane's live Terminal/RdpView instance for
+  // reconnectPane, never read reactively.
+  let paneRefs: Record<string, Terminal | RdpView> = {};
+
+  /** Called from App.svelte (via the tab strip's right-click "Reconnect")
+   * with the paneId to reconnect - both Terminal and RdpView expose their
+   * own `reconnect()` that reuses the existing terminal/canvas and just
+   * opens a fresh session, so this only has to find the right instance. */
+  export function reconnectPane(paneId: string) {
+    void paneRefs[paneId]?.reconnect();
+  }
+
   // Pure percentage math, recomputed whenever the tree shape or sizes
   // change — deliberately NOT what drives which Terminal/RdpView components
   // exist. Those render from a flat {#each} keyed only by paneId (below),
@@ -68,6 +81,7 @@
         <div class="pane-body">
           {#if pane.protocol === "rdp"}
             <RdpView
+              bind:this={paneRefs[paneId]}
               options={pane.options as RdpConnectOptions}
               {active}
               on:state={(e) => onPaneState(paneId, e.detail)}
@@ -75,6 +89,7 @@
             />
           {:else}
             <Terminal
+              bind:this={paneRefs[paneId]}
               protocol={pane.protocol}
               options={pane.options}
               savedSessionId={pane.savedSessionId}
