@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount, createEventDispatcher } from "svelte";
   import type { RdpConnectOptions, RdpEvent, SessionState } from "../bridge";
-  import { rdpConnect, rdpDisconnect, subscribeRdp } from "../bridge";
+  import { rdpConnect, rdpDisconnect, subscribeRdp, trustRdpHostKey } from "../bridge";
   import RingMark from "./RingMark.svelte";
+  import Dialog from "./Dialog.svelte";
 
   export let options: RdpConnectOptions;
   export let active = true;
@@ -19,6 +20,16 @@
   let status: "connecting" | "connected" | "disconnected" | "error" = "connecting";
   let statusMessage = "";
   let desktopSize: { width: number; height: number } | null = null;
+
+  /** Set while an RDP connection is refused because the server's
+   * certificate doesn't match what Portus recorded last time — the
+   * changed-certificate confirm prompt renders while this is non-null.
+   * `null` the rest of the time (the vastly more common case: this never
+   * happens on a host that never hit a mismatch). Mirrors Terminal.svelte's
+   * own hostKeyMismatch for SSH. */
+  let hostKeyMismatch: { hostId: string; fingerprint: string; keyBase64: string } | null = null;
+  let trustingHostKey = false;
+  let trustHostKeyError: string | null = null;
 
   function handleEvent(event: RdpEvent) {
     switch (event.type) {
@@ -58,6 +69,12 @@
         dispatch("closed", { reason: event.reason });
         break;
       }
+      case "host_key_mismatch": {
+        status = "error";
+        hostKeyMismatch = { hostId: event.hostId, fingerprint: event.fingerprint, keyBase64: event.keyBase64 };
+        dispatch("state", "disconnected");
+        break;
+      }
     }
   }
 
@@ -72,6 +89,7 @@
     sub = null;
     status = "connecting";
     statusMessage = "";
+    hostKeyMismatch = null;
     dispatch("state", "connecting");
     try {
       rdpId = await rdpConnect(options);
@@ -81,6 +99,26 @@
       statusMessage = String(e);
       dispatch("state", "disconnected");
     }
+  }
+
+  async function trustAndReconnect() {
+    if (!hostKeyMismatch) return;
+    trustingHostKey = true;
+    trustHostKeyError = null;
+    try {
+      await trustRdpHostKey(hostKeyMismatch.hostId, hostKeyMismatch.keyBase64);
+      hostKeyMismatch = null;
+      await reconnect();
+    } catch (e) {
+      trustHostKeyError = e instanceof Error ? e.message : String(e);
+    } finally {
+      trustingHostKey = false;
+    }
+  }
+
+  function dismissHostKeyMismatch() {
+    hostKeyMismatch = null;
+    trustHostKeyError = null;
   }
 
   onMount(reconnect);
@@ -110,6 +148,29 @@
     </div>
   {/if}
 </div>
+
+{#if hostKeyMismatch}
+  <Dialog label="RDP certificate changed" width="440px" on:cancel={dismissHostKeyMismatch}>
+    <h2 class="title">RDP certificate changed</h2>
+    <p class="body">
+      The certificate presented by <strong>{hostKeyMismatch.hostId}</strong> doesn't match the one Portus recorded
+      last time (fingerprint now <code>SHA256:{hostKeyMismatch.fingerprint}</code>).
+    </p>
+    <p class="body">
+      This is expected if the server was reinstalled or rebuilt. It can also mean the connection is being
+      intercepted — only continue if you're sure the new certificate is legitimate.
+    </p>
+    {#if trustHostKeyError}
+      <p class="error">{trustHostKeyError}</p>
+    {/if}
+    <div class="actions">
+      <button class="btn" disabled={trustingHostKey} on:click={dismissHostKeyMismatch}>Cancel</button>
+      <button class="btn danger" disabled={trustingHostKey} on:click={trustAndReconnect}>
+        {trustingHostKey ? "Connecting…" : "Trust new certificate & reconnect"}
+      </button>
+    </div>
+  </Dialog>
+{/if}
 
 <style>
   .rdp-view {
@@ -148,5 +209,53 @@
     font-size: 13px;
     max-width: 80%;
     text-align: center;
+  }
+
+  .title {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--fg-primary);
+  }
+  .body {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--fg-secondary);
+    line-height: 1.4;
+  }
+  .error {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--status-error);
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+  .btn {
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--surface-3);
+    color: var(--fg-primary);
+    font-size: 0.78rem;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+  }
+  .btn:hover {
+    background: var(--surface-4);
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  .btn.danger {
+    background: var(--status-error);
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn.danger:hover {
+    filter: brightness(1.08);
   }
 </style>

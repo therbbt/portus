@@ -1,0 +1,64 @@
+//! A minimal TOFU (trust-on-first-use) known-hosts store for RDP server
+//! certificates — mirrors `portus_ssh::known_hosts` (same JSON-keyed-by-
+//! "host:port" shape), just a separate file: an RDP certificate and an SSH
+//! host key for the same hostname are unrelated cryptographic material, so
+//! they can't share one store.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+pub fn path() -> PathBuf {
+    portus_core::config::config_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("rdp_known_hosts.json")
+}
+
+fn load(path: &std::path::Path) -> HashMap<String, String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save(path: &std::path::Path, entries: &HashMap<String, String>) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(entries) {
+        let _ = std::fs::write(path, json);
+    }
+}
+
+pub enum Verdict {
+    /// First time we've seen this host — key was recorded, connection may proceed.
+    TrustedOnFirstUse,
+    /// Matches what we recorded last time.
+    Known,
+    /// The presented key does NOT match what we recorded — possible MITM.
+    Mismatch,
+}
+
+/// Force-overwrites (or inserts) the stored key for `host_id`, regardless of
+/// what's currently on record. The only way to recover from a
+/// `Verdict::Mismatch` short of editing the JSON file by hand — callers must
+/// have gotten explicit user confirmation first, since this trusts blindly.
+pub fn trust(host_id: &str, key_base64: &str) {
+    let path = path();
+    let mut entries = load(&path);
+    entries.insert(host_id.to_string(), key_base64.to_string());
+    save(&path, &entries);
+}
+
+pub fn verify(host_id: &str, presented_key_base64: &str) -> Verdict {
+    let path = path();
+    let mut entries = load(&path);
+    match entries.get(host_id) {
+        Some(stored) if stored == presented_key_base64 => Verdict::Known,
+        Some(_) => Verdict::Mismatch,
+        None => {
+            entries.insert(host_id.to_string(), presented_key_base64.to_string());
+            save(&path, &entries);
+            Verdict::TrustedOnFirstUse
+        }
+    }
+}

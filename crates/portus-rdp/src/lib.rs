@@ -9,11 +9,14 @@
 //! forwarding, no clipboard, no resize — those are natural follow-ups once
 //! the picture is on screen at all.
 
+mod known_hosts;
+
 use std::io::Write as _;
 use std::net::TcpStream;
 use std::time::Duration;
 
 use base64::Engine as _;
+use sha2::Digest as _;
 use ironrdp::connector::{self, Credentials};
 use ironrdp::pdu::gcc::KeyboardType;
 use ironrdp::pdu::rdp::capability_sets::MajorPlatformType;
@@ -63,6 +66,22 @@ pub enum RdpEvent {
     Frame(FrameUpdate),
     Disconnected { reason: Option<String> },
     Error { message: String },
+    /// The server's TLS certificate doesn't match the one Portus recorded
+    /// last time for this host — a legitimate certificate renewal (server
+    /// rebuilt/reinstalled) or an active MITM look identical from here.
+    /// The connection has already been refused; `trust_host_key` is the
+    /// only way to proceed. Mirrors `SessionEvent::HostKeyMismatch` (SSH).
+    HostKeyMismatch { host_id: String, fingerprint: String, key_base64: String },
+}
+
+/// Overwrites the stored certificate for `host_id` ("host:port") with
+/// `key_base64` so a subsequent connect to it succeeds instead of hitting
+/// `known_hosts::Verdict::Mismatch` again. The frontend calls this only
+/// after the user has explicitly confirmed the new certificate (the
+/// host-key-changed prompt) — it trusts blindly, with no verification of
+/// its own. Mirrors `portus_ssh::trust_host_key`.
+pub fn trust_host_key(host_id: &str, key_base64: &str) {
+    known_hosts::trust(host_id, key_base64);
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -118,7 +137,7 @@ fn run(
     cmd_rx: mpsc::UnboundedReceiver<RdpCommand>,
     ready_tx: oneshot::Sender<Result<(), RdpError>>,
 ) {
-    let (connection_result, framed) = match connect(&options) {
+    let (connection_result, framed) = match connect(&options, &events) {
         Ok(ok) => ok,
         Err(e) => {
             let _ = ready_tx.send(Err(RdpError::Protocol(e)));
@@ -137,7 +156,10 @@ fn run(
     active_stage_loop(connection_result, framed, &mut image, cmd_rx, &events);
 }
 
-fn connect(options: &RdpConnectOptions) -> Result<(connector::ConnectionResult, UpgradedFramed), String> {
+fn connect(
+    options: &RdpConnectOptions,
+    events: &mpsc::UnboundedSender<RdpEvent>,
+) -> Result<(connector::ConnectionResult, UpgradedFramed), String> {
     let config = build_config(options);
 
     let server_addr = lookup_addr(&options.host, options.port).map_err(|e| format!("lookup addr: {e}"))?;
@@ -159,6 +181,28 @@ fn connect(options: &RdpConnectOptions) -> Result<(connector::ConnectionResult, 
     let initial_stream = framed.into_inner_no_leftover();
     let (upgraded_stream, server_public_key) =
         tls_upgrade(initial_stream, options.host.clone()).map_err(|e| format!("TLS upgrade: {e}"))?;
+
+    // TOFU-verify the certificate's public key against what was recorded
+    // last time, the same way portus-ssh pins a host's key - the TLS layer
+    // above accepts any certificate by design (see tls_upgrade's own
+    // comment on NoCertificateVerification), so this is the only place
+    // anything actually checks server identity across connections.
+    let host_id = format!("{}:{}", options.host, options.port);
+    let key_base64 = base64::engine::general_purpose::STANDARD.encode(&server_public_key);
+    match known_hosts::verify(&host_id, &key_base64) {
+        known_hosts::Verdict::Known => {}
+        known_hosts::Verdict::TrustedOnFirstUse => {
+            tracing::info!("trusting new RDP certificate for {host_id}");
+        }
+        known_hosts::Verdict::Mismatch => {
+            let fingerprint = sha2::Sha256::digest(&server_public_key).iter().map(|b| format!("{b:02x}")).collect::<String>();
+            let msg = format!("RDP certificate for {host_id} has changed (fingerprint now SHA256:{fingerprint}) — refusing to connect, possible MITM");
+            tracing::warn!("{msg}");
+            let _ = events.send(RdpEvent::HostKeyMismatch { host_id, fingerprint, key_base64 });
+            return Err(msg);
+        }
+    }
+
     let upgraded = ironrdp_blocking::mark_as_upgraded(should_upgrade, &mut connector);
 
     let mut upgraded_framed = Framed::new(upgraded_stream);
@@ -221,11 +265,13 @@ fn build_config(options: &RdpConnectOptions) -> connector::Config {
     }
 }
 
-/// Same "don't verify, just connect" posture as the reference example —
-/// good enough for a first cut, but unlike SSH's TOFU known-hosts store,
-/// this doesn't pin anything: nothing here would catch a changed
-/// certificate on a later connection. Worth tightening before this is
-/// trusted with anything sensitive.
+/// This layer alone still accepts any certificate — rustls' own
+/// verification hook can only accept-or-reject *during* the handshake,
+/// before the caller has anywhere to put a "does this match what we saw
+/// last time, and should the user decide?" prompt. Returning the server's
+/// public key lets `connect` do the actual TOFU pinning decision
+/// afterward, against `known_hosts`, the same way SSH's known-hosts store
+/// does — see the `known_hosts::verify` call right after this returns.
 fn tls_upgrade(stream: TcpStream, server_name: String) -> Result<(rustls::StreamOwned<rustls::ClientConnection, TcpStream>, Vec<u8>), String> {
     let mut config = rustls::client::ClientConfig::builder()
         .dangerous()
@@ -261,7 +307,9 @@ fn extract_public_key(cert: &rustls::pki_types::CertificateDer<'_>) -> Result<Ve
         .ok_or_else(|| "subject public key BIT STRING is not aligned".to_string())
 }
 
-/// Accepts any server certificate — see the caveat on `tls_upgrade` above.
+/// Accepts any server certificate at the TLS layer itself — see
+/// `tls_upgrade`'s own comment on why the actual trust decision has to
+/// happen one level up, after this returns.
 #[derive(Debug)]
 struct NoCertificateVerification;
 
