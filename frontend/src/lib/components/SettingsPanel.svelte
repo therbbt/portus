@@ -115,6 +115,55 @@
       ? LIGHT_DEFAULT_COLORS
       : DARK_DEFAULT_COLORS;
 
+  // Portus's second built-in theme — a neon pink/cyan palette matching
+  // therbbt's own branding (dark backdrop, hot-pink signature color, cyan
+  // secondary accent, violet undertones). Deliberately dark-only (no light
+  // variant the way DEFAULT_COLORS has) rather than adapting to the OS's
+  // light/dark setting, the same way most themed terminal palettes
+  // (Dracula, Synthwave '84, ...) aren't light-mode-aware either — spread
+  // from DARK_DEFAULT_COLORS rather than listing every key, so every swatch
+  // this doesn't explicitly override (the backgrounds and text colors —
+  // "keep the background color") is *structurally* guaranteed identical to
+  // today's default, not just by omission that could silently drift.
+  const THERBBT_COLORS: Record<keyof TerminalColors, string> = {
+    ...DARK_DEFAULT_COLORS,
+    black: "#3a2a42",
+    red: "#ff3864",
+    // Matches the sidebar/SSH accent below, same as DARK_DEFAULT_COLORS'
+    // own green/brightGreen deliberately match its accent rather than
+    // reading as literal green — see that block's comment.
+    green: "#ff2e97",
+    yellow: "#ffd23f",
+    blue: "#6e7bff",
+    magenta: "#c026d3",
+    cyan: "#2dd4e8",
+    white: "#d9c2d6",
+    brightBlack: "#6b5570",
+    brightRed: "#ff5577",
+    brightGreen: "#ff2e97",
+    brightYellow: "#ffe066",
+    // Folders & directories — matches folderIcon below for consistency
+    // between the sidebar's folder icon and a folder's color inside a
+    // terminal listing.
+    brightBlue: "#ff8fc0",
+    brightMagenta: "#ff6ec7",
+    brightCyan: "#7df9ff",
+    brightWhite: "#ffffff",
+    // Success stays a true, unambiguous green on purpose — this is a
+    // separate dedicated slot specifically so it can stay semantically
+    // "green" independent of whatever the ANSI green slot above is doing
+    // (see TerminalColors' own doc comment on highlightGreen).
+    highlightGreen: "#39ff88",
+    highlightGet: "#2de6b0",
+    highlightUrl: "#ff5fa8",
+    highlightIpv6: "#a78bfa",
+    folderIcon: "#ff8fc0",
+    sshIndicator: "#ff2e97",
+    statusConnecting: "#ffd23f",
+    statusDisconnected: "#6b5570",
+    statusError: "#ff3864",
+  };
+
   // Grouped by what each color is actually *for*, not by ANSI slot/weight —
   // "Standard"/"Bright"/"Dedicated" told you where a color lives in the
   // palette, not what changing it would actually affect, so finding "the
@@ -253,6 +302,11 @@
   // outside the theme picker. This id is a plain sentinel, never a real
   // theme's (those are crypto.randomUUID()), so it can never collide.
   const DEFAULT_THEME_ID = "default";
+  // Portus's second built-in theme, pinned right after Default - same
+  // fixed/not-deletable treatment, just resolving to THERBBT_COLORS
+  // instead of DEFAULT_COLORS. A user can still freely create their own
+  // themes on top of either one via "New theme…", same as always.
+  const THERBBT_THEME_ID = "therbbt";
 
   let fontFamily = terminalFontFamily;
   let fontSize = terminalFontSize;
@@ -267,7 +321,9 @@
   // same way.
   let savedThemes: Theme[] = [...themes];
   let selectedThemeId: string =
-    activeThemeId !== null && savedThemes.some((t) => t.id === activeThemeId) ? activeThemeId : DEFAULT_THEME_ID;
+    activeThemeId !== null && (activeThemeId === THERBBT_THEME_ID || savedThemes.some((t) => t.id === activeThemeId))
+      ? activeThemeId
+      : DEFAULT_THEME_ID;
   // Always holds a real hex per swatch (never null) so <input type="color">
   // always has something valid to show. Deliberately *not* seeded from
   // `terminalColors` directly — always derived from whichever theme
@@ -279,7 +335,9 @@
   let colors: Record<keyof TerminalColors, string> =
     selectedThemeId === DEFAULT_THEME_ID
       ? { ...DEFAULT_COLORS }
-      : { ...DEFAULT_COLORS, ...stripNulls(savedThemes.find((t) => t.id === selectedThemeId)?.colors ?? {}) };
+      : selectedThemeId === THERBBT_THEME_ID
+        ? { ...THERBBT_COLORS }
+        : { ...DEFAULT_COLORS, ...stripNulls(savedThemes.find((t) => t.id === selectedThemeId)?.colors ?? {}) };
   let showNewThemeInput = false;
   let newThemeName = "";
   let panelEl: HTMLDivElement;
@@ -293,7 +351,11 @@
   let themeTriggerEl: HTMLButtonElement;
   let themeMenuEl: HTMLDivElement | undefined;
   $: selectedThemeName =
-    selectedThemeId === DEFAULT_THEME_ID ? "Default" : (savedThemes.find((t) => t.id === selectedThemeId)?.name ?? "Default");
+    selectedThemeId === DEFAULT_THEME_ID
+      ? "Default"
+      : selectedThemeId === THERBBT_THEME_ID
+        ? "therbbt"
+        : (savedThemes.find((t) => t.id === selectedThemeId)?.name ?? "Default");
 
   function pickTheme(id: string) {
     loadTheme(id);
@@ -367,16 +429,21 @@
       colors = { ...DEFAULT_COLORS };
       return;
     }
+    if (id === THERBBT_THEME_ID) {
+      colors = { ...THERBBT_COLORS };
+      return;
+    }
     const theme = savedThemes.find((t) => t.id === id);
     if (!theme) return;
     colors = { ...DEFAULT_COLORS, ...stripNulls(theme.colors) };
   }
 
-  // Default's colors are fixed — every swatch is rendered `disabled` (see
-  // the markup below) whenever this is true, so there's nothing to edit
-  // rather than something to edit that then bounces back. Customizing
-  // anything requires "New theme" first — see confirmNewTheme below.
-  $: colorsLocked = selectedThemeId === DEFAULT_THEME_ID;
+  // Both built-in themes' colors are fixed — every swatch is rendered
+  // `disabled` (see the markup below) whenever this is true, so there's
+  // nothing to edit rather than something to edit that then bounces back.
+  // Customizing anything requires "New theme" first — see confirmNewTheme
+  // below.
+  $: colorsLocked = selectedThemeId === DEFAULT_THEME_ID || selectedThemeId === THERBBT_THEME_ID;
 
   // A real saved theme, though, *is* live-edited in place: picking one
   // (or just having created one below) and then tweaking a swatch updates
@@ -385,7 +452,7 @@
   // next time this same theme gets loaded. Nothing here reaches App.svelte
   // until this panel's own Save, so it's exactly as reversible via Cancel
   // as every other edit in this panel.
-  $: if (selectedThemeId !== DEFAULT_THEME_ID) {
+  $: if (selectedThemeId !== DEFAULT_THEME_ID && selectedThemeId !== THERBBT_THEME_ID) {
     const id = selectedThemeId;
     const nextColors = diffFromDefaults(colors);
     savedThemes = savedThemes.map((t) => (t.id === id ? { ...t, colors: nextColors } : t));
@@ -422,7 +489,7 @@
   }
 
   function deleteSelectedTheme() {
-    if (selectedThemeId === DEFAULT_THEME_ID) return;
+    if (selectedThemeId === DEFAULT_THEME_ID || selectedThemeId === THERBBT_THEME_ID) return;
     savedThemes = savedThemes.filter((t) => t.id !== selectedThemeId);
     loadTheme(DEFAULT_THEME_ID);
   }
@@ -438,7 +505,14 @@
       themes: savedThemes,
       // DEFAULT_THEME_ID is a UI-only sentinel, never a real theme — stored
       // as `null` (its own meaning on this field, see bridge.ts's Theme
-      // doc comment), the same as it arrived as a prop.
+      // doc comment), the same as it arrived as a prop. THERBBT_THEME_ID is
+      // also a sentinel (THERBBT_COLORS isn't a real Theme either, same as
+      // DEFAULT_COLORS isn't), but it stores as the literal "therbbt"
+      // string rather than null, since Settings needs to tell "Default"
+      // and "therbbt" apart on next open — loadConfig's fallback-to-Default
+      // handling for an unrecognized id (a theme deleted elsewhere, or a
+      // config from before therbbt existed) still applies to any value
+      // that isn't one of these two sentinels or a real saved theme's id.
       activeThemeId: selectedThemeId === DEFAULT_THEME_ID ? null : selectedThemeId,
     });
   }
@@ -565,6 +639,16 @@
                   >
                     Default
                   </button>
+                  <button
+                    type="button"
+                    class="theme-option"
+                    class:active={selectedThemeId === THERBBT_THEME_ID}
+                    role="option"
+                    aria-selected={selectedThemeId === THERBBT_THEME_ID}
+                    on:click={() => pickTheme(THERBBT_THEME_ID)}
+                  >
+                    therbbt
+                  </button>
                   {#each savedThemes as theme (theme.id)}
                     <button
                       type="button"
@@ -585,7 +669,7 @@
               <button
                 class="btn"
                 type="button"
-                disabled={selectedThemeId === DEFAULT_THEME_ID}
+                disabled={selectedThemeId === DEFAULT_THEME_ID || selectedThemeId === THERBBT_THEME_ID}
                 on:click={deleteSelectedTheme}
               >
                 Delete
@@ -617,11 +701,11 @@
             </div>
           {/if}
           {#if colorsLocked}
-            <p class="hint">Default's colors are fixed. Click "New theme…" above to name one and start customizing.</p>
+            <p class="hint">{selectedThemeName}'s colors are fixed. Click "New theme…" above to name one and start customizing.</p>
           {:else}
             <p class="hint">
-              Every swatch below updates the selected theme directly. Switch back to Default any time — its colors
-              can't be changed, so it's always there as a clean starting point.
+              Every swatch below updates the selected theme directly. Switch back to Default or therbbt any time —
+              their colors can't be changed, so they're always there as a clean starting point.
             </p>
           {/if}
 
