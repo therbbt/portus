@@ -400,6 +400,15 @@ export async function sftpDownloadFile(id: string, path: string, localPath: stri
   await invoke("sftp_download_file", { id, path, localPath });
 }
 
+/** Recursively mirrors remote directory `path` into local directory
+ * `localPath`, entirely server-side (one file streamed at a time, same as
+ * sftpDownloadFile) — `localPath` is the full destination directory to
+ * create, not a parent to invent a name under (see SftpPanel.svelte, which
+ * appends the remote folder's own name to whatever the user picked). */
+export async function sftpDownloadDir(id: string, path: string, localPath: string): Promise<void> {
+  await invoke("sftp_download_dir", { id, path, localPath });
+}
+
 /** Streams straight from `localPath` to the remote file server-side, rather
  * than reading the whole thing into JS and sending it over as
  * `Array.from(Uint8Array)` — that conversion alone (every byte becomes its

@@ -59,6 +59,43 @@ async fn sftp_round_trips_a_directory_and_a_file() {
     sftp.remove_dir(&dir).await.expect("remove_dir failed");
 }
 
+#[tokio::test]
+async fn sftp_downloads_a_nested_directory_tree() {
+    let Some(sftp) = connect().await else {
+        eprintln!("skipping: PORTUS_TEST_SSH_KEY / PORTUS_TEST_SSH_USER not set");
+        return;
+    };
+
+    // dir/
+    //   top.txt
+    //   sub/
+    //     nested.txt
+    let dir = format!("portus-sftp-test-dirdl-{}", uuid_like());
+    let sub = format!("{dir}/sub");
+    sftp.create_dir(&dir).await.expect("create_dir (top) failed");
+    sftp.create_dir(&sub).await.expect("create_dir (sub) failed");
+
+    let local_src = std::env::temp_dir().join(format!("portus-sftp-test-dirdl-src-{}", uuid_like()));
+    std::fs::write(&local_src, b"TOP").expect("write local temp file failed");
+    sftp.upload_from_file(&local_src, &format!("{dir}/top.txt")).await.expect("upload (top) failed");
+    std::fs::write(&local_src, b"NESTED").expect("overwrite local temp file failed");
+    sftp.upload_from_file(&local_src, &format!("{sub}/nested.txt")).await.expect("upload (nested) failed");
+    std::fs::remove_file(&local_src).ok();
+
+    let local_dest = std::env::temp_dir().join(format!("portus-sftp-test-dirdl-dest-{}", uuid_like()));
+    sftp.download_dir_to(&dir, &local_dest).await.expect("download_dir_to failed");
+
+    assert_eq!(std::fs::read(local_dest.join("top.txt")).expect("top.txt missing"), b"TOP");
+    assert_eq!(std::fs::read(local_dest.join("sub").join("nested.txt")).expect("sub/nested.txt missing"), b"NESTED");
+
+    std::fs::remove_dir_all(&local_dest).ok();
+
+    sftp.remove_file(&format!("{sub}/nested.txt")).await.expect("remove_file (nested) failed");
+    sftp.remove_dir(&sub).await.expect("remove_dir (sub) failed");
+    sftp.remove_file(&format!("{dir}/top.txt")).await.expect("remove_file (top) failed");
+    sftp.remove_dir(&dir).await.expect("remove_dir (top) failed");
+}
+
 /// Cheap unique-enough suffix without pulling in the `uuid` crate here.
 fn uuid_like() -> u128 {
     std::time::SystemTime::now()
