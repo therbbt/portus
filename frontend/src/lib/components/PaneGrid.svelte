@@ -146,10 +146,12 @@
     background: var(--status-connecting);
   }
   .pane-dot[data-state="connected"] {
-    /* Grey by default, matching the sidebar's own non-SSH session icon
-       color (SessionTree/FolderNode's plain .session-icon) — only an SSH
-       pane earns the accent, same distinction the sidebar already draws. */
-    background: var(--fg-secondary);
+    /* --status-connected-default (amber by default, see tokens.css's own
+       note), matching the sidebar's own non-SSH session icon color
+       (SessionTree/FolderNode's plain .session-icon) — only an SSH pane
+       earns --status-connected itself, same distinction the sidebar
+       already draws. */
+    background: var(--status-connected-default);
   }
   .pane-dot[data-state="connected"][data-protocol="ssh"] {
     background: var(--status-connected);

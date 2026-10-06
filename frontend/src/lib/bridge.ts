@@ -199,6 +199,11 @@ export interface TerminalColors {
    * so this can be customized without also changing buttons, focus rings,
    * and the active tab indicator. */
   sshIndicator?: string | null;
+  /** Overrides `--status-connected-default`, the tab/pane dot and sidebar
+   * session icon color for a connected session that ISN'T SSH (shell,
+   * serial, telnet, RDP) — separate from `sshIndicator` above. Defaults to
+   * the same amber `--status-connecting`/`--folder-icon-color` already use. */
+  defaultIndicator?: string | null;
   /** Overrides `--surface-0`, the app's outermost background — behind the
    * sidebar, tab strip, and every panel. */
   windowBackground?: string | null;

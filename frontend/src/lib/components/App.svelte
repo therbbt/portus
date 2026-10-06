@@ -239,6 +239,7 @@
     sidebarBackground: "--surface-1",
     folderIcon: "--folder-icon-color",
     sshIndicator: "--status-connected",
+    defaultIndicator: "--status-connected-default",
     windowBackground: "--surface-0",
     panelBackground: "--surface-2",
     hoverBackground: "--surface-3",

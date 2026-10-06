@@ -62,6 +62,7 @@
     sidebarBackground: "#1e1e22",
     folderIcon: "#e8a33d",
     sshIndicator: "#5b9bd5",
+    defaultIndicator: "#e8a33d",
     windowBackground: "#16161a",
     panelBackground: "#28282d",
     hoverBackground: "#303036",
@@ -98,6 +99,7 @@
     sidebarBackground: "#fefdfb",
     folderIcon: "#8a5a12",
     sshIndicator: "#2563eb",
+    defaultIndicator: "#8a5a12",
     windowBackground: "#faf8f4",
     panelBackground: "#f0ece4",
     hoverBackground: "#e5e0d5",
@@ -114,6 +116,79 @@
     typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches
       ? LIGHT_DEFAULT_COLORS
       : DARK_DEFAULT_COLORS;
+
+  // Portus's second built-in theme — therbbt's own branding (dark backdrop,
+  // hot-pink signature color, cyan secondary accent), restrained rather
+  // than a wall of distinct saturated hues: pink marks "this is a live
+  // session" (prompt, sshIndicator, URLs), cyan marks "this is a place"
+  // (folders, addresses, symlinks) — two accents with distinct meanings
+  // rather than one color standing in for everything, and everything else
+  // pulled back to muted violet-grey neutrals or a conventional (not neon)
+  // semantic color. First pass used a different vivid color per ANSI slot
+  // and read as too busy; second pass shared one pink across folders *and*
+  // sessions, which then couldn't be told apart at a glance. Deliberately
+  // dark-only (no light variant the way
+  // DEFAULT_COLORS has) rather than adapting to the OS's light/dark
+  // setting, the same way most themed terminal palettes (Dracula, Rosé
+  // Pine, ...) aren't light-mode-aware either — spread from
+  // DARK_DEFAULT_COLORS rather than listing every key, so every swatch
+  // this doesn't explicitly override (the backgrounds and text colors —
+  // "keep the background color") is *structurally* guaranteed identical to
+  // today's default, not just by omission that could silently drift.
+  const THERBBT_PINK = "#f2409c";
+  const THERBBT_CYAN = "#3fd6e0";
+  const THERBBT_COLORS: Record<keyof TerminalColors, string> = {
+    ...DARK_DEFAULT_COLORS,
+    black: "#322a38",
+    red: "#e0485f",
+    // Matches the sidebar/SSH accent below, same as DARK_DEFAULT_COLORS'
+    // own green/brightGreen deliberately match its accent rather than
+    // reading as literal green — see that block's comment.
+    green: THERBBT_PINK,
+    yellow: "#d9a84e",
+    // MAC addresses / ports — folded into the same muted violet-grey rather
+    // than each getting their own saturated hue, so the pink/cyan pair
+    // reads as the theme's one real accent instead of competing with it.
+    blue: "#8d87a8",
+    magenta: "#9d7bab",
+    cyan: THERBBT_CYAN,
+    white: "#a39aa8",
+    brightBlack: "#6e6475",
+    brightRed: "#f2607a",
+    brightGreen: THERBBT_PINK,
+    brightYellow: "#e8bd6e",
+    // Folders & directories — matches folderIcon below for consistency
+    // between the sidebar's folder icon and a folder's color inside a
+    // terminal listing. Cyan rather than pink specifically so a folder and
+    // an SSH session (sshIndicator, still pink) read as visibly different
+    // things at a glance instead of competing for the same signature color.
+    brightBlue: THERBBT_CYAN,
+    brightMagenta: "#a893b5",
+    brightCyan: THERBBT_CYAN,
+    brightWhite: "#e8e3ea",
+    // Success stays a true, muted (not neon) green on purpose — this is a
+    // separate dedicated slot specifically so it can stay semantically
+    // "green" independent of whatever the ANSI green slot above is doing
+    // (see TerminalColors' own doc comment on highlightGreen).
+    highlightGreen: "#5fd68a",
+    highlightGet: THERBBT_CYAN,
+    highlightUrl: THERBBT_PINK,
+    highlightIpv6: "#8d87a8",
+    // Cyan, not pink — kept visually distinct from sshIndicator below so a
+    // folder row and an SSH session row don't read as the same thing.
+    folderIcon: THERBBT_CYAN,
+    sshIndicator: THERBBT_PINK,
+    // Cyan too, not the plain grey Default uses — a connected local shell/
+    // serial/telnet/RDP session now reads as clearly "connected" instead
+    // of looking like it might be the same muted tone as statusDisconnected.
+    defaultIndicator: THERBBT_CYAN,
+    // A soft violet of its own, not sharing yellow's hue — "connecting" and
+    // "warning" looking identical was confusing with the gold this used
+    // before.
+    statusConnecting: "#8a6fd1",
+    statusDisconnected: "#6e6475",
+    statusError: "#e0485f",
+  };
 
   // Grouped by what each color is actually *for*, not by ANSI slot/weight —
   // "Standard"/"Bright"/"Dedicated" told you where a color lives in the
@@ -241,6 +316,12 @@
         { key: "textDisabled", use: "Disabled text", secondary: "Text on a disabled control", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "folderIcon", use: "Sidebar folder icon", secondary: "Different from Folders & directories above (that's inside a terminal)", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "sshIndicator", use: "SSH indicator", secondary: "The tab/pane dot and sidebar icon that mark a session as SSH", tooltip: "Not part of the 16-color ANSI palette" },
+        {
+          key: "defaultIndicator",
+          use: "Non-SSH session indicator",
+          secondary: "Same dot/icon, for shell, serial, telnet & RDP sessions",
+          tooltip: "Not part of the 16-color ANSI palette",
+        },
         { key: "statusConnecting", use: "Connecting status", secondary: "Status dot while a session is still connecting", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "statusDisconnected", use: "Disconnected status", secondary: "Status dot for a closed session", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "statusError", use: "Error status", secondary: "Status dot/text for a failed session", tooltip: "Not part of the 16-color ANSI palette" },
@@ -253,6 +334,11 @@
   // outside the theme picker. This id is a plain sentinel, never a real
   // theme's (those are crypto.randomUUID()), so it can never collide.
   const DEFAULT_THEME_ID = "default";
+  // Portus's second built-in theme, pinned right after Default - same
+  // fixed/not-deletable treatment, just resolving to THERBBT_COLORS
+  // instead of DEFAULT_COLORS. A user can still freely create their own
+  // themes on top of either one via "New theme…", same as always.
+  const THERBBT_THEME_ID = "therbbt";
 
   let fontFamily = terminalFontFamily;
   let fontSize = terminalFontSize;
@@ -267,7 +353,9 @@
   // same way.
   let savedThemes: Theme[] = [...themes];
   let selectedThemeId: string =
-    activeThemeId !== null && savedThemes.some((t) => t.id === activeThemeId) ? activeThemeId : DEFAULT_THEME_ID;
+    activeThemeId !== null && (activeThemeId === THERBBT_THEME_ID || savedThemes.some((t) => t.id === activeThemeId))
+      ? activeThemeId
+      : DEFAULT_THEME_ID;
   // Always holds a real hex per swatch (never null) so <input type="color">
   // always has something valid to show. Deliberately *not* seeded from
   // `terminalColors` directly — always derived from whichever theme
@@ -279,7 +367,9 @@
   let colors: Record<keyof TerminalColors, string> =
     selectedThemeId === DEFAULT_THEME_ID
       ? { ...DEFAULT_COLORS }
-      : { ...DEFAULT_COLORS, ...stripNulls(savedThemes.find((t) => t.id === selectedThemeId)?.colors ?? {}) };
+      : selectedThemeId === THERBBT_THEME_ID
+        ? { ...THERBBT_COLORS }
+        : { ...DEFAULT_COLORS, ...stripNulls(savedThemes.find((t) => t.id === selectedThemeId)?.colors ?? {}) };
   let showNewThemeInput = false;
   let newThemeName = "";
   let panelEl: HTMLDivElement;
@@ -293,7 +383,11 @@
   let themeTriggerEl: HTMLButtonElement;
   let themeMenuEl: HTMLDivElement | undefined;
   $: selectedThemeName =
-    selectedThemeId === DEFAULT_THEME_ID ? "Default" : (savedThemes.find((t) => t.id === selectedThemeId)?.name ?? "Default");
+    selectedThemeId === DEFAULT_THEME_ID
+      ? "Default"
+      : selectedThemeId === THERBBT_THEME_ID
+        ? "therbbt"
+        : (savedThemes.find((t) => t.id === selectedThemeId)?.name ?? "Default");
 
   function pickTheme(id: string) {
     loadTheme(id);
@@ -367,16 +461,21 @@
       colors = { ...DEFAULT_COLORS };
       return;
     }
+    if (id === THERBBT_THEME_ID) {
+      colors = { ...THERBBT_COLORS };
+      return;
+    }
     const theme = savedThemes.find((t) => t.id === id);
     if (!theme) return;
     colors = { ...DEFAULT_COLORS, ...stripNulls(theme.colors) };
   }
 
-  // Default's colors are fixed — every swatch is rendered `disabled` (see
-  // the markup below) whenever this is true, so there's nothing to edit
-  // rather than something to edit that then bounces back. Customizing
-  // anything requires "New theme" first — see confirmNewTheme below.
-  $: colorsLocked = selectedThemeId === DEFAULT_THEME_ID;
+  // Both built-in themes' colors are fixed — every swatch is rendered
+  // `disabled` (see the markup below) whenever this is true, so there's
+  // nothing to edit rather than something to edit that then bounces back.
+  // Customizing anything requires "New theme" first — see confirmNewTheme
+  // below.
+  $: colorsLocked = selectedThemeId === DEFAULT_THEME_ID || selectedThemeId === THERBBT_THEME_ID;
 
   // A real saved theme, though, *is* live-edited in place: picking one
   // (or just having created one below) and then tweaking a swatch updates
@@ -385,7 +484,7 @@
   // next time this same theme gets loaded. Nothing here reaches App.svelte
   // until this panel's own Save, so it's exactly as reversible via Cancel
   // as every other edit in this panel.
-  $: if (selectedThemeId !== DEFAULT_THEME_ID) {
+  $: if (selectedThemeId !== DEFAULT_THEME_ID && selectedThemeId !== THERBBT_THEME_ID) {
     const id = selectedThemeId;
     const nextColors = diffFromDefaults(colors);
     savedThemes = savedThemes.map((t) => (t.id === id ? { ...t, colors: nextColors } : t));
@@ -422,7 +521,7 @@
   }
 
   function deleteSelectedTheme() {
-    if (selectedThemeId === DEFAULT_THEME_ID) return;
+    if (selectedThemeId === DEFAULT_THEME_ID || selectedThemeId === THERBBT_THEME_ID) return;
     savedThemes = savedThemes.filter((t) => t.id !== selectedThemeId);
     loadTheme(DEFAULT_THEME_ID);
   }
@@ -438,7 +537,14 @@
       themes: savedThemes,
       // DEFAULT_THEME_ID is a UI-only sentinel, never a real theme — stored
       // as `null` (its own meaning on this field, see bridge.ts's Theme
-      // doc comment), the same as it arrived as a prop.
+      // doc comment), the same as it arrived as a prop. THERBBT_THEME_ID is
+      // also a sentinel (THERBBT_COLORS isn't a real Theme either, same as
+      // DEFAULT_COLORS isn't), but it stores as the literal "therbbt"
+      // string rather than null, since Settings needs to tell "Default"
+      // and "therbbt" apart on next open — loadConfig's fallback-to-Default
+      // handling for an unrecognized id (a theme deleted elsewhere, or a
+      // config from before therbbt existed) still applies to any value
+      // that isn't one of these two sentinels or a real saved theme's id.
       activeThemeId: selectedThemeId === DEFAULT_THEME_ID ? null : selectedThemeId,
     });
   }
@@ -565,6 +671,16 @@
                   >
                     Default
                   </button>
+                  <button
+                    type="button"
+                    class="theme-option"
+                    class:active={selectedThemeId === THERBBT_THEME_ID}
+                    role="option"
+                    aria-selected={selectedThemeId === THERBBT_THEME_ID}
+                    on:click={() => pickTheme(THERBBT_THEME_ID)}
+                  >
+                    therbbt
+                  </button>
                   {#each savedThemes as theme (theme.id)}
                     <button
                       type="button"
@@ -585,7 +701,7 @@
               <button
                 class="btn"
                 type="button"
-                disabled={selectedThemeId === DEFAULT_THEME_ID}
+                disabled={selectedThemeId === DEFAULT_THEME_ID || selectedThemeId === THERBBT_THEME_ID}
                 on:click={deleteSelectedTheme}
               >
                 Delete
@@ -617,11 +733,11 @@
             </div>
           {/if}
           {#if colorsLocked}
-            <p class="hint">Default's colors are fixed. Click "New theme…" above to name one and start customizing.</p>
+            <p class="hint">{selectedThemeName}'s colors are fixed. Click "New theme…" above to name one and start customizing.</p>
           {:else}
             <p class="hint">
-              Every swatch below updates the selected theme directly. Switch back to Default any time — its colors
-              can't be changed, so it's always there as a clean starting point.
+              Every swatch below updates the selected theme directly. Switch back to Default or therbbt any time —
+              their colors can't be changed, so they're always there as a clean starting point.
             </p>
           {/if}
 
