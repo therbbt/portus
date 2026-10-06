@@ -481,7 +481,9 @@
   }
   .session-icon {
     flex-shrink: 0;
-    color: var(--fg-secondary);
+    /* Resolves to plain --fg-secondary unless a theme overrides it — see
+       --status-connected-default's own note in tokens.css. */
+    color: var(--status-connected-default);
   }
   /* --status-connected, not --accent directly — this is the same "this is
      SSH" identity TabStrip/PaneGrid's own connected-dot uses (defaults to

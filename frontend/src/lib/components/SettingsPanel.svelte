@@ -62,6 +62,7 @@
     sidebarBackground: "#1e1e22",
     folderIcon: "#e8a33d",
     sshIndicator: "#5b9bd5",
+    defaultIndicator: "#97958d",
     windowBackground: "#16161a",
     panelBackground: "#28282d",
     hoverBackground: "#303036",
@@ -98,6 +99,7 @@
     sidebarBackground: "#fefdfb",
     folderIcon: "#8a5a12",
     sshIndicator: "#2563eb",
+    defaultIndicator: "#6b6259",
     windowBackground: "#faf8f4",
     panelBackground: "#f0ece4",
     hoverBackground: "#e5e0d5",
@@ -176,6 +178,10 @@
     // folder row and an SSH session row don't read as the same thing.
     folderIcon: THERBBT_CYAN,
     sshIndicator: THERBBT_PINK,
+    // Cyan too, not the plain grey Default uses — a connected local shell/
+    // serial/telnet/RDP session now reads as clearly "connected" instead
+    // of looking like it might be the same muted tone as statusDisconnected.
+    defaultIndicator: THERBBT_CYAN,
     // A soft violet of its own, not sharing yellow's hue — "connecting" and
     // "warning" looking identical was confusing with the gold this used
     // before.
@@ -310,6 +316,12 @@
         { key: "textDisabled", use: "Disabled text", secondary: "Text on a disabled control", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "folderIcon", use: "Sidebar folder icon", secondary: "Different from Folders & directories above (that's inside a terminal)", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "sshIndicator", use: "SSH indicator", secondary: "The tab/pane dot and sidebar icon that mark a session as SSH", tooltip: "Not part of the 16-color ANSI palette" },
+        {
+          key: "defaultIndicator",
+          use: "Non-SSH session indicator",
+          secondary: "Same dot/icon, for shell, serial, telnet & RDP sessions — plain text color by default",
+          tooltip: "Not part of the 16-color ANSI palette",
+        },
         { key: "statusConnecting", use: "Connecting status", secondary: "Status dot while a session is still connecting", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "statusDisconnected", use: "Disconnected status", secondary: "Status dot for a closed session", tooltip: "Not part of the 16-color ANSI palette" },
         { key: "statusError", use: "Error status", secondary: "Status dot/text for a failed session", tooltip: "Not part of the 16-color ANSI palette" },

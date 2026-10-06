@@ -57,17 +57,26 @@
      and it's already an established color in the app instead of a new one
      to learn. --status-connected specifically means "this pane/tab/session
      is SSH" everywhere it's used (TabStrip.svelte, PaneGrid.svelte,
-     SessionTree/FolderNode's .session-icon.ssh) — a non-SSH connected
-     state always renders plain --fg-secondary instead, so this name is a
-     little generic for what it actually, exclusively does; kept as-is
-     rather than renamed, to avoid a config-breaking field rename in
-     Settings' saved themes (see TerminalColors.sshIndicator in bridge.ts).
+     SessionTree/FolderNode's .session-icon.ssh), so this name is a little
+     generic for what it actually, exclusively does; kept as-is rather than
+     renamed, to avoid a config-breaking field rename in Settings' saved
+     themes (see TerminalColors.sshIndicator in bridge.ts).
      Defaults to --accent, same identity as before, but customizing it in
      Settings only overrides this var, not --accent itself. */
   --status-connecting: #e8a33d;
   --status-connected: var(--accent);
   --status-disconnected: #726f66;
   --status-error: #ef4444;
+
+  /* A connected session that ISN'T SSH (shell, serial, telnet, RDP) used
+     to always render the same four call sites above in plain --fg-secondary
+     with no override point at all — fine for Default, but a theme with its
+     own accent family (therbbt) had no way to give those protocols a
+     "connected" color of their own the way SSH already gets one, so a
+     healthy local shell and an actually-disconnected one could end up
+     looking confusingly similar. References --fg-secondary here so Default
+     renders exactly as before unless this is explicitly overridden. */
+  --status-connected-default: var(--fg-secondary);
 
   /* The sidebar's folder icon (FolderNode.svelte) — previously hardcoded
      inline, pulled out here specifically so Settings can offer it as a
