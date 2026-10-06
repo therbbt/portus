@@ -115,53 +115,63 @@
       ? LIGHT_DEFAULT_COLORS
       : DARK_DEFAULT_COLORS;
 
-  // Portus's second built-in theme — a neon pink/cyan palette matching
-  // therbbt's own branding (dark backdrop, hot-pink signature color, cyan
-  // secondary accent, violet undertones). Deliberately dark-only (no light
-  // variant the way DEFAULT_COLORS has) rather than adapting to the OS's
-  // light/dark setting, the same way most themed terminal palettes
-  // (Dracula, Synthwave '84, ...) aren't light-mode-aware either — spread
-  // from DARK_DEFAULT_COLORS rather than listing every key, so every swatch
+  // Portus's second built-in theme — therbbt's own branding (dark backdrop,
+  // hot-pink signature color, cyan secondary accent), restrained rather
+  // than a wall of distinct saturated hues: one pink used consistently
+  // everywhere the brand itself shows up (prompt, folders, the SSH/session
+  // indicator, URLs), one cyan for addresses, and everything else pulled
+  // back to muted violet-grey neutrals or a conventional (not neon)
+  // semantic color — first pass used a different vivid color per ANSI slot
+  // and read as too busy. Deliberately dark-only (no light variant the way
+  // DEFAULT_COLORS has) rather than adapting to the OS's light/dark
+  // setting, the same way most themed terminal palettes (Dracula, Rosé
+  // Pine, ...) aren't light-mode-aware either — spread from
+  // DARK_DEFAULT_COLORS rather than listing every key, so every swatch
   // this doesn't explicitly override (the backgrounds and text colors —
   // "keep the background color") is *structurally* guaranteed identical to
   // today's default, not just by omission that could silently drift.
+  const THERBBT_PINK = "#f2409c";
+  const THERBBT_CYAN = "#3fd6e0";
   const THERBBT_COLORS: Record<keyof TerminalColors, string> = {
     ...DARK_DEFAULT_COLORS,
-    black: "#3a2a42",
-    red: "#ff3864",
+    black: "#322a38",
+    red: "#e0485f",
     // Matches the sidebar/SSH accent below, same as DARK_DEFAULT_COLORS'
     // own green/brightGreen deliberately match its accent rather than
     // reading as literal green — see that block's comment.
-    green: "#ff2e97",
-    yellow: "#ffd23f",
-    blue: "#6e7bff",
-    magenta: "#c026d3",
-    cyan: "#2dd4e8",
-    white: "#d9c2d6",
-    brightBlack: "#6b5570",
-    brightRed: "#ff5577",
-    brightGreen: "#ff2e97",
-    brightYellow: "#ffe066",
+    green: THERBBT_PINK,
+    yellow: "#d9a84e",
+    // MAC addresses / ports — folded into the same muted violet-grey rather
+    // than each getting their own saturated hue, so the pink/cyan pair
+    // reads as the theme's one real accent instead of competing with it.
+    blue: "#8d87a8",
+    magenta: "#9d7bab",
+    cyan: THERBBT_CYAN,
+    white: "#a39aa8",
+    brightBlack: "#6e6475",
+    brightRed: "#f2607a",
+    brightGreen: THERBBT_PINK,
+    brightYellow: "#e8bd6e",
     // Folders & directories — matches folderIcon below for consistency
     // between the sidebar's folder icon and a folder's color inside a
     // terminal listing.
-    brightBlue: "#ff8fc0",
-    brightMagenta: "#ff6ec7",
-    brightCyan: "#7df9ff",
-    brightWhite: "#ffffff",
-    // Success stays a true, unambiguous green on purpose — this is a
+    brightBlue: THERBBT_PINK,
+    brightMagenta: "#a893b5",
+    brightCyan: THERBBT_CYAN,
+    brightWhite: "#e8e3ea",
+    // Success stays a true, muted (not neon) green on purpose — this is a
     // separate dedicated slot specifically so it can stay semantically
     // "green" independent of whatever the ANSI green slot above is doing
     // (see TerminalColors' own doc comment on highlightGreen).
-    highlightGreen: "#39ff88",
-    highlightGet: "#2de6b0",
-    highlightUrl: "#ff5fa8",
-    highlightIpv6: "#a78bfa",
-    folderIcon: "#ff8fc0",
-    sshIndicator: "#ff2e97",
-    statusConnecting: "#ffd23f",
-    statusDisconnected: "#6b5570",
-    statusError: "#ff3864",
+    highlightGreen: "#5fd68a",
+    highlightGet: THERBBT_CYAN,
+    highlightUrl: THERBBT_PINK,
+    highlightIpv6: "#8d87a8",
+    folderIcon: THERBBT_PINK,
+    sshIndicator: THERBBT_PINK,
+    statusConnecting: "#d9a84e",
+    statusDisconnected: "#6e6475",
+    statusError: "#e0485f",
   };
 
   // Grouped by what each color is actually *for*, not by ANSI slot/weight —
