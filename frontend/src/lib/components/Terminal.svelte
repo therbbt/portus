@@ -370,6 +370,19 @@
     outline: none !important;
     box-shadow: none !important;
   }
+  /* WebKitGTK (this app's Linux webview) renders an overlay scrollbar that
+     floats on top of content instead of reserving its own gutter the way a
+     classic scrollbar does - FitAddon sizes xterm's columns to the
+     viewport's full clientWidth, which under an overlay scrollbar never
+     shrinks to make room for one, so the floating scrollbar then sits
+     directly on top of (and makes unreadable) whatever text is in the
+     rightmost column or two while actively scrolling. scrollbar-gutter:
+     stable tells the engine to always reserve that space up front, the
+     same as a classic scrollbar would, so the scrollbar has its own lane
+     instead of overlapping text. */
+  .terminal-host :global(.xterm-viewport) {
+    scrollbar-gutter: stable;
+  }
 
   .title {
     margin: 0;
