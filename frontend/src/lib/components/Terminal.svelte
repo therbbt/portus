@@ -31,8 +31,6 @@
   export let protocol: Protocol = "shell";
   export let options: SessionOptions = undefined;
   export let active = true;
-  /** Set only when this tab was opened from a saved session — see openSession. */
-  export let savedSessionId: string | undefined = undefined;
 
   const dispatch = createEventDispatcher<{
     state: SessionState;
@@ -195,7 +193,7 @@
     // openSession's doc comment for why a local shell needs this ordering.
     sub = await subscribeSession(sessionId, handleEvent);
     dispatch("ready", { sessionId });
-    await openSession(sessionId, protocol, options, savedSessionId);
+    await openSession(sessionId, protocol, options);
     void resizeSession(sessionId, term.cols, term.rows);
   }
 
@@ -262,7 +260,7 @@
     // openSession's doc comment for why a local shell needs this ordering.
     sub = await subscribeSession(sessionId, handleEvent);
     dispatch("ready", { sessionId });
-    await openSession(sessionId, protocol, options, savedSessionId);
+    await openSession(sessionId, protocol, options);
 
     term.onData((data) => {
       if (sessionId) void writeSession(sessionId, new TextEncoder().encode(data));

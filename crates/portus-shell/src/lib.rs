@@ -1,7 +1,5 @@
 //! Local shell `Session`, backed by `portable-pty`. This crate is just the
-//! byte source — grid rendering/reflow is xterm.js's job, and scrollback
-//! persistence to disk (for saved shell presets) lives in
-//! `portus_core::scrollback`, not here.
+//! byte source — grid rendering/reflow is xterm.js's job.
 
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};

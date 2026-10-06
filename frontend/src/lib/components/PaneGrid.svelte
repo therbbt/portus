@@ -92,7 +92,6 @@
               bind:this={paneRefs[paneId]}
               protocol={pane.protocol}
               options={pane.options}
-              savedSessionId={pane.savedSessionId}
               {active}
               on:state={(e) => onPaneState(paneId, e.detail)}
               on:title={(e) => onPaneTitle(paneId, e.detail.title)}
