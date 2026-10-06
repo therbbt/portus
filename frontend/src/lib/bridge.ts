@@ -66,18 +66,9 @@ export type SessionOptions = SshConnectOptions | SerialConnectOptions | RdpConne
  * that subscribing only after this resolved routinely missed it, leaving
  * its tab's status dot stuck on "connecting" forever (an SSH session's
  * slower handshake almost always won that race, which is why only local
- * shell tabs showed it). `savedSessionId` is set only when this tab is
- * opening a saved session — it's what unlocks scrollback persistence for a
- * saved shell preset on the backend (see portus_core::scrollback). An
- * ad-hoc tab has no stable identity to persist scrollback under, so it's
- * omitted for those. */
-export async function openSession(
-  sessionId: string,
-  protocol: Protocol,
-  options?: SessionOptions,
-  savedSessionId?: string,
-): Promise<void> {
-  await invoke("session_open", { sessionId, protocol, options: options ?? null, savedSessionId: savedSessionId ?? null });
+ * shell tabs showed it). */
+export async function openSession(sessionId: string, protocol: Protocol, options?: SessionOptions): Promise<void> {
+  await invoke("session_open", { sessionId, protocol, options: options ?? null });
 }
 
 /** A session id the caller mints itself, before the session exists on the

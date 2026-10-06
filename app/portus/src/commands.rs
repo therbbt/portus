@@ -21,15 +21,10 @@ pub fn session_open(
     session_id: String,
     protocol: String,
     options: Option<serde_json::Value>,
-    // Set when this tab is opening a saved session, not an ad-hoc one — the
-    // only thing it currently unlocks is scrollback persistence for saved
-    // shell presets (see portus_core::scrollback), since an ad-hoc tab has
-    // no stable identity to persist scrollback under anyway.
-    saved_session_id: Option<Uuid>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    state.open(session_id, &protocol, options.unwrap_or(serde_json::Value::Null), saved_session_id, app)
+    state.open(session_id, &protocol, options.unwrap_or(serde_json::Value::Null), app)
 }
 
 #[tauri::command]
@@ -238,7 +233,6 @@ pub fn delete_session(saved_session_id: Uuid) -> Result<Config, String> {
         if let Some(handle) = removed.auth.credential_handle() {
             let _ = portus_core::keychain::delete(handle);
         }
-        let _ = portus_core::scrollback::clear(saved_session_id);
     }
     portus_core::config::save(&config).map_err(|e| e.to_string())?;
     Ok(config)

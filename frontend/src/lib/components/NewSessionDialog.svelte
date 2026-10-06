@@ -173,8 +173,9 @@
       const displayName = wslActive ? `${selectedWslDistro} (WSL)` : (options.shellCommand ?? "$SHELL");
       // Generated client-side (rather than left for save_session to fill
       // in) so the caller knows the real saved-session id immediately,
-      // synchronously - needed to open the tab with the right id for
-      // scrollback keying without waiting on the save round-trip first.
+      // synchronously - needed to open the tab with the right id for folder
+      // slug lookups and "Save as session" defaults to work from the very
+      // first render, without waiting on the save round-trip first.
       const save: SaveSessionInput | null = canSave
         ? {
             id: crypto.randomUUID(),

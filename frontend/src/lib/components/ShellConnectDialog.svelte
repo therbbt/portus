@@ -69,8 +69,9 @@
   function buildSaveInput(): SaveSessionInput {
     // Generated client-side (rather than left for save_session to fill in)
     // so the caller knows the real saved-session id immediately,
-    // synchronously — needed to open the tab with the right id for
-    // scrollback keying without waiting on the save round-trip first.
+    // synchronously — needed to open the tab with the right id for folder
+    // slug lookups and "Save as session" defaults to work from the very
+    // first render, without waiting on the save round-trip first.
     return {
       id: editSession?.id ?? crypto.randomUUID(),
       name: saveName.trim(),
@@ -162,10 +163,7 @@
       </label>
     </div>
     {#if !saveName.trim()}
-      <p class="hint">
-        Leave the name blank for a one-off terminal that isn't saved. A saved terminal also keeps its scrollback
-        across restarts.
-      </p>
+      <p class="hint">Leave the name blank for a one-off terminal that isn't saved.</p>
     {/if}
 
     <div class="actions">
