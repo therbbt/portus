@@ -460,7 +460,13 @@ export type RdpEvent =
   | { type: "connected"; width: number; height: number }
   | ({ type: "frame" } & RdpFrameUpdate)
   | { type: "disconnected"; reason: string | null }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** The server's TLS certificate doesn't match what Portus last recorded
+   * for this host — a legitimate certificate renewal (server rebuilt) or
+   * an active MITM look identical from here. The connection has already
+   * been refused; `trustRdpHostKey` is the only way to proceed. Mirrors
+   * SessionEvent's own `host_key_mismatch` (SSH). */
+  | { type: "host_key_mismatch"; hostId: string; fingerprint: string; keyBase64: string };
 
 export async function rdpConnect(options: RdpConnectOptions): Promise<string> {
   return invoke<string>("rdp_connect", { options });
@@ -470,13 +476,21 @@ export async function rdpDisconnect(id: string): Promise<void> {
   await invoke("rdp_disconnect", { id });
 }
 
+/** Overwrites the stored RDP certificate for `hostId` ("host:port") with
+ * `keyBase64` — call only after the user has explicitly confirmed a
+ * `host_key_mismatch` event is expected, then retry `rdpConnect`. Mirrors
+ * `trustHostKey` (SSH). */
+export async function trustRdpHostKey(hostId: string, keyBase64: string): Promise<void> {
+  await invoke("rdp_trust_host_key", { hostId, keyBase64 });
+}
+
 export interface SessionSubscription {
   unlisten(): Promise<void>;
 }
 
 /** Subscribes to every `rdp:<id>:*` channel and dispatches to `onEvent`. */
 export async function subscribeRdp(id: string, onEvent: (event: RdpEvent) => void): Promise<SessionSubscription> {
-  const kinds = ["connected", "frame", "disconnected", "error"];
+  const kinds = ["connected", "frame", "disconnected", "error", "host_key_mismatch"];
   const unlistens: UnlistenFn[] = await Promise.all(
     kinds.map((kind) => listen(`rdp:${id}:${kind}`, (e) => onEvent(e.payload as RdpEvent))),
   );

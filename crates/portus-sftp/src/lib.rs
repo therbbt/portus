@@ -20,6 +20,28 @@ pub enum SftpError {
     Sftp(#[from] russh_sftp::client::error::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("refusing to use unsafe directory entry name: {0:?}")]
+    UnsafeEntryName(String),
+}
+
+/// A single directory entry's name is supposed to be exactly one path
+/// component — this rejects anything that isn't, before it ever reaches a
+/// `Path::join`. `Path::join` doesn't strip `..`/separators, so joining an
+/// unchecked name can walk straight out of the intended destination
+/// directory (classic zip-slip-style path traversal). On the download side
+/// this matters for real: `entry.name` comes straight from the *remote*
+/// server's own `SSH_FXP_READDIR` response, which is nothing more than a
+/// string the server chose to send - a malicious or compromised SFTP
+/// server can report a "file" named e.g. `"../../../../home/you/.ssh/
+/// authorized_keys"` and have it written there on download. A real,
+/// single-component name can only ever join into a direct child of the
+/// base directory, so refusing anything else is both correct and
+/// sufficient - no need to canonicalize-and-compare afterward.
+fn safe_entry_name(name: &str) -> Result<&str, SftpError> {
+    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
+        return Err(SftpError::UnsafeEntryName(name.to_string()));
+    }
+    Ok(name)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -103,8 +125,9 @@ impl SftpClient {
         Box::pin(async move {
             tokio::fs::create_dir_all(local_path).await?;
             for entry in self.list(remote_path).await? {
-                let remote_child = format!("{}/{}", remote_path.trim_end_matches('/'), entry.name);
-                let local_child = local_path.join(&entry.name);
+                let name = safe_entry_name(&entry.name)?;
+                let remote_child = format!("{}/{name}", remote_path.trim_end_matches('/'));
+                let local_child = local_path.join(name);
                 if entry.is_dir {
                     self.download_dir_to(&remote_child, &local_child).await?;
                 } else {
@@ -149,7 +172,13 @@ impl SftpClient {
             let _ = self.session.create_dir(remote_path).await;
             let mut entries = tokio::fs::read_dir(local_path).await?;
             while let Some(entry) = entries.next_entry().await? {
-                let name = entry.file_name().to_string_lossy().into_owned();
+                // The OS already guarantees a single read_dir entry's own
+                // file_name() can't contain a separator, so this can't
+                // actually trip here the way the download side's remote-
+                // controlled names can - kept anyway for the same defense-
+                // in-depth reason as everywhere else a boundary is checked
+                // even when one side of it is currently trusted.
+                let name = safe_entry_name(&entry.file_name().to_string_lossy())?.to_string();
                 let remote_child = format!("{}/{name}", remote_path.trim_end_matches('/'));
                 let local_child = entry.path();
                 if entry.file_type().await?.is_dir() {
@@ -175,5 +204,27 @@ impl SftpClient {
     pub async fn remove_dir(&self, path: &str) -> Result<(), SftpError> {
         self.session.remove_dir(path).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_entry_name_accepts_a_plain_single_component() {
+        assert_eq!(safe_entry_name("hello.txt").unwrap(), "hello.txt");
+        assert_eq!(safe_entry_name("sub-dir").unwrap(), "sub-dir");
+    }
+
+    #[test]
+    fn safe_entry_name_rejects_traversal_and_separators() {
+        assert!(safe_entry_name("../../../etc/passwd").is_err());
+        assert!(safe_entry_name("..").is_err());
+        assert!(safe_entry_name(".").is_err());
+        assert!(safe_entry_name("").is_err());
+        assert!(safe_entry_name("a/b").is_err());
+        assert!(safe_entry_name("a\\b").is_err());
+        assert!(safe_entry_name("/etc/passwd").is_err());
     }
 }

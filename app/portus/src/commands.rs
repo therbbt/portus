@@ -52,6 +52,16 @@ pub fn ssh_trust_host_key(host_id: String, key_base64: String) -> Result<(), Str
     Ok(())
 }
 
+/// The RDP mirror of `ssh_trust_host_key` above — called only after the
+/// user has explicitly confirmed a changed RDP certificate (see
+/// `RdpEvent::HostKeyMismatch`), so the frontend's follow-up `rdp_connect`
+/// retry succeeds instead of hitting the same mismatch again.
+#[tauri::command]
+pub fn rdp_trust_host_key(host_id: String, key_base64: String) -> Result<(), String> {
+    portus_rdp::trust_host_key(&host_id, &key_base64);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_config() -> Result<Config, String> {
     portus_core::config::load().map_err(|e| e.to_string())
@@ -498,6 +508,7 @@ fn emit_rdp_event(app: &AppHandle, id: &str, event: &RdpEvent) {
         RdpEvent::Frame(_) => "frame",
         RdpEvent::Disconnected { .. } => "disconnected",
         RdpEvent::Error { .. } => "error",
+        RdpEvent::HostKeyMismatch { .. } => "host_key_mismatch",
     };
     let _ = app.emit(&format!("rdp:{id}:{kind}"), event);
 }

@@ -8,9 +8,11 @@ license.workspace = true
 portus-core = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 base64 = "0.22"
+sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ironrdp = { version = "0.17", features = ["session", "connector", "graphics", "pdu"] }
 ironrdp-blocking = "0.10"
