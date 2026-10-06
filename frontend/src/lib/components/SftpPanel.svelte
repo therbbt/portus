@@ -8,6 +8,7 @@
     sftpDownloadFile,
     sftpDownloadDir,
     sftpUploadFile,
+    sftpUploadDir,
     sftpRemoveFile,
     sftpCreateDir,
     sftpRemoveDir,
@@ -211,6 +212,32 @@
     }
   }
 
+  // Same reasoning as uploadFiles above, just picking directories instead -
+  // streams every file in each picked folder straight from disk to the
+  // remote side (see sftpUploadDir) rather than loading anything into JS.
+  async function uploadFolders() {
+    if (!sftpId) return;
+    const selected = await openFileDialog({ directory: true, multiple: true });
+    if (!selected) return; // cancelled
+    const paths = Array.isArray(selected) ? selected : [selected];
+    error = null;
+    statusMessage = null;
+    try {
+      for (const localPath of paths) {
+        // filter(Boolean) in case the picked path has a trailing separator,
+        // which would otherwise leave split()'s last element empty.
+        const name = localPath.split(/[/\\]/).filter(Boolean).pop() ?? localPath;
+        uploadingName = name;
+        await sftpUploadDir(sftpId, localPath, joinPath(currentPath, name));
+      }
+      await load(currentPath);
+    } catch (e) {
+      error = String(e);
+    } finally {
+      uploadingName = null;
+    }
+  }
+
   async function confirmNewFolder() {
     if (!sftpId || !newFolderName.trim()) return;
     try {
@@ -245,7 +272,8 @@
         Uploading {uploadingName}…
       </span>
     {:else}
-      <button class="toolbar-btn" on:click={uploadFiles}>↥ Upload</button>
+      <button class="toolbar-btn" on:click={uploadFiles}>↥ Files</button>
+      <button class="toolbar-btn" on:click={uploadFolders}>↥ Folder</button>
     {/if}
   </div>
 

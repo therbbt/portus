@@ -96,6 +96,37 @@ async fn sftp_downloads_a_nested_directory_tree() {
     sftp.remove_dir(&dir).await.expect("remove_dir (top) failed");
 }
 
+#[tokio::test]
+async fn sftp_uploads_a_nested_directory_tree() {
+    let Some(sftp) = connect().await else {
+        eprintln!("skipping: PORTUS_TEST_SSH_KEY / PORTUS_TEST_SSH_USER not set");
+        return;
+    };
+
+    // local_src/
+    //   top.txt
+    //   sub/
+    //     nested.txt
+    let local_src = std::env::temp_dir().join(format!("portus-sftp-test-dirul-src-{}", uuid_like()));
+    let local_sub = local_src.join("sub");
+    std::fs::create_dir_all(&local_sub).expect("create local dirs failed");
+    std::fs::write(local_src.join("top.txt"), b"TOP").expect("write top.txt failed");
+    std::fs::write(local_sub.join("nested.txt"), b"NESTED").expect("write nested.txt failed");
+
+    let dir = format!("portus-sftp-test-dirul-{}", uuid_like());
+    sftp.upload_dir_from(&local_src, &dir).await.expect("upload_dir_from failed");
+
+    assert_eq!(sftp.read_file(&format!("{dir}/top.txt")).await.expect("top.txt missing"), b"TOP");
+    assert_eq!(sftp.read_file(&format!("{dir}/sub/nested.txt")).await.expect("sub/nested.txt missing"), b"NESTED");
+
+    std::fs::remove_dir_all(&local_src).ok();
+
+    sftp.remove_file(&format!("{dir}/sub/nested.txt")).await.expect("remove_file (nested) failed");
+    sftp.remove_dir(&format!("{dir}/sub")).await.expect("remove_dir (sub) failed");
+    sftp.remove_file(&format!("{dir}/top.txt")).await.expect("remove_file (top) failed");
+    sftp.remove_dir(&dir).await.expect("remove_dir (top) failed");
+}
+
 /// Cheap unique-enough suffix without pulling in the `uuid` crate here.
 fn uuid_like() -> u128 {
     std::time::SystemTime::now()

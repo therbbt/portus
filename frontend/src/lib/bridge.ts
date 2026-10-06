@@ -417,6 +417,15 @@ export async function sftpUploadFile(id: string, localPath: string, path: string
   await invoke("sftp_upload_file", { id, localPath, path });
 }
 
+/** Recursively mirrors local directory `localPath` into remote directory
+ * `path`, entirely server-side (one file streamed at a time, same as
+ * sftpUploadFile) — `path` is the full destination directory to create, not
+ * a parent to invent a name under (see SftpPanel.svelte, which appends the
+ * local folder's own name to wherever it's being uploaded into). */
+export async function sftpUploadDir(id: string, localPath: string, path: string): Promise<void> {
+  await invoke("sftp_upload_dir", { id, localPath, path });
+}
+
 export async function sftpRemoveFile(id: string, path: string): Promise<void> {
   await invoke("sftp_remove_file", { id, path });
 }
