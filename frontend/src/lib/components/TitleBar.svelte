@@ -100,7 +100,8 @@
     <span data-tauri-drag-region>Portus</span>
   </div>
   <div class="spacer" data-tauri-drag-region></div>
-  <div class="toolbar-group">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="toolbar-group" on:dblclick|stopPropagation>
     <button
       class="toolbar-btn"
       class:active={sidebarHidden}
@@ -131,7 +132,8 @@
       <span>Settings</span>
     </button>
   </div>
-  <div class="window-controls">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="window-controls" on:dblclick|stopPropagation>
     <button class="win-btn" aria-label="Minimize" on:click={() => appWindow.minimize()}>
       <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="9" x2="9" y2="9" stroke="currentColor" stroke-width="1.2" /></svg>
     </button>
