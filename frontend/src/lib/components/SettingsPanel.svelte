@@ -117,12 +117,15 @@
 
   // Portus's second built-in theme — therbbt's own branding (dark backdrop,
   // hot-pink signature color, cyan secondary accent), restrained rather
-  // than a wall of distinct saturated hues: one pink used consistently
-  // everywhere the brand itself shows up (prompt, folders, the SSH/session
-  // indicator, URLs), one cyan for addresses, and everything else pulled
-  // back to muted violet-grey neutrals or a conventional (not neon)
-  // semantic color — first pass used a different vivid color per ANSI slot
-  // and read as too busy. Deliberately dark-only (no light variant the way
+  // than a wall of distinct saturated hues: pink marks "this is a live
+  // session" (prompt, sshIndicator, URLs), cyan marks "this is a place"
+  // (folders, addresses, symlinks) — two accents with distinct meanings
+  // rather than one color standing in for everything, and everything else
+  // pulled back to muted violet-grey neutrals or a conventional (not neon)
+  // semantic color. First pass used a different vivid color per ANSI slot
+  // and read as too busy; second pass shared one pink across folders *and*
+  // sessions, which then couldn't be told apart at a glance. Deliberately
+  // dark-only (no light variant the way
   // DEFAULT_COLORS has) rather than adapting to the OS's light/dark
   // setting, the same way most themed terminal palettes (Dracula, Rosé
   // Pine, ...) aren't light-mode-aware either — spread from
@@ -154,8 +157,10 @@
     brightYellow: "#e8bd6e",
     // Folders & directories — matches folderIcon below for consistency
     // between the sidebar's folder icon and a folder's color inside a
-    // terminal listing.
-    brightBlue: THERBBT_PINK,
+    // terminal listing. Cyan rather than pink specifically so a folder and
+    // an SSH session (sshIndicator, still pink) read as visibly different
+    // things at a glance instead of competing for the same signature color.
+    brightBlue: THERBBT_CYAN,
     brightMagenta: "#a893b5",
     brightCyan: THERBBT_CYAN,
     brightWhite: "#e8e3ea",
@@ -167,9 +172,14 @@
     highlightGet: THERBBT_CYAN,
     highlightUrl: THERBBT_PINK,
     highlightIpv6: "#8d87a8",
-    folderIcon: THERBBT_PINK,
+    // Cyan, not pink — kept visually distinct from sshIndicator below so a
+    // folder row and an SSH session row don't read as the same thing.
+    folderIcon: THERBBT_CYAN,
     sshIndicator: THERBBT_PINK,
-    statusConnecting: "#d9a84e",
+    // A soft violet of its own, not sharing yellow's hue — "connecting" and
+    // "warning" looking identical was confusing with the gold this used
+    // before.
+    statusConnecting: "#8a6fd1",
     statusDisconnected: "#6e6475",
     statusError: "#e0485f",
   };
