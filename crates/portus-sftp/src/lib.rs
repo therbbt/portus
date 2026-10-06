@@ -131,6 +131,37 @@ impl SftpClient {
         Ok(())
     }
 
+    /// Recursively mirrors a local directory tree into a remote one, the
+    /// upload mirror of `download_dir_to` above — same reasoning applies in
+    /// reverse (streams one file at a time via `upload_from_file`, boxed/
+    /// pinned for the same self-recursion reason `download_dir_to`'s own
+    /// doc comment explains). `create_dir`'s result is ignored rather than
+    /// propagated: a subdirectory that already exists remotely would
+    /// otherwise fail the whole upload, and any *other* reason it couldn't
+    /// be created (permissions, etc.) surfaces naturally anyway the moment
+    /// a file tries to upload into it.
+    pub fn upload_dir_from<'a>(
+        &'a self,
+        local_path: &'a std::path::Path,
+        remote_path: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), SftpError>> + Send + 'a>> {
+        Box::pin(async move {
+            let _ = self.session.create_dir(remote_path).await;
+            let mut entries = tokio::fs::read_dir(local_path).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let remote_child = format!("{}/{name}", remote_path.trim_end_matches('/'));
+                let local_child = entry.path();
+                if entry.file_type().await?.is_dir() {
+                    self.upload_dir_from(&local_child, &remote_child).await?;
+                } else {
+                    self.upload_from_file(&local_child, &remote_child).await?;
+                }
+            }
+            Ok(())
+        })
+    }
+
     pub async fn remove_file(&self, path: &str) -> Result<(), SftpError> {
         self.session.remove_file(path).await?;
         Ok(())

@@ -383,6 +383,18 @@ pub async fn sftp_upload_file(id: String, local_path: String, path: String, stat
         .map_err(|e| e.to_string())
 }
 
+/// `local_path` is a local directory (SftpPanel.svelte only offers this for
+/// a picked folder) and `path` is the full remote destination directory to
+/// create - mirrors sftp_download_dir in reverse.
+#[tauri::command]
+pub async fn sftp_upload_dir(id: String, local_path: String, path: String, state: State<'_, SftpState>) -> Result<(), String> {
+    state
+        .get(&id)?
+        .upload_dir_from(std::path::Path::new(&local_path), &path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// `local_path` comes from the frontend's native save dialog (see
 /// SftpPanel.svelte), not typed by hand — the whole point is the user
 /// picks exactly where it lands, same as any other desktop app's download.
