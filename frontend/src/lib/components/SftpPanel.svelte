@@ -6,6 +6,7 @@
     sftpConnect,
     sftpList,
     sftpDownloadFile,
+    sftpDownloadDir,
     sftpUploadFile,
     sftpRemoveFile,
     sftpCreateDir,
@@ -54,6 +55,15 @@
     if (path === ".") return ".";
     const idx = path.lastIndexOf("/");
     return idx <= 0 ? "." : path.slice(0, idx);
+  }
+
+  // Local filesystem paths, unlike the remote ones joinPath above handles —
+  // a directory picker on Windows returns backslash-separated paths, so
+  // this picks whichever separator the picked path is already using rather
+  // than assuming "/" the way the remote side safely can.
+  function joinLocalPath(base: string, name: string): string {
+    const sep = base.includes("\\") && !base.includes("/") ? "\\" : "/";
+    return base.endsWith(sep) ? base + name : `${base}${sep}${name}`;
   }
 
   function formatSize(bytes: number): string {
@@ -123,15 +133,37 @@
   // idea of a "default downloads folder" for a synthetic click like that).
   // This asks the user exactly where to put it, same as any other desktop
   // app's download, and the destination is what actually gets shown back.
+  //
+  // A folder instead asks for a destination *directory* to download into
+  // (there's no "save as" for a whole tree) and recreates the remote
+  // folder's own name underneath it — matching how every other desktop
+  // app's "download this folder" picker behaves, and avoiding silently
+  // dumping a folder's contents loose into whatever directory was picked.
   async function downloadEntry(entry: SftpDirEntry) {
     if (!sftpId) return;
+    const remotePath = joinPath(currentPath, entry.name);
+    error = null;
+    statusMessage = null;
+    if (entry.isDir) {
+      const parentDir = await openFileDialog({ directory: true });
+      if (!parentDir || Array.isArray(parentDir)) return; // cancelled
+      const destination = joinLocalPath(parentDir, entry.name);
+      downloadingName = entry.name;
+      try {
+        await sftpDownloadDir(sftpId, remotePath, destination);
+        statusMessage = `Downloaded folder to ${destination}`;
+      } catch (e) {
+        error = String(e);
+      } finally {
+        downloadingName = null;
+      }
+      return;
+    }
     const destination = await saveFileDialog({ defaultPath: entry.name });
     if (!destination) return; // cancelled
     downloadingName = entry.name;
-    error = null;
-    statusMessage = null;
     try {
-      await sftpDownloadFile(sftpId, joinPath(currentPath, entry.name), destination);
+      await sftpDownloadFile(sftpId, remotePath, destination);
       statusMessage = `Saved to ${destination}`;
     } catch (e) {
       error = String(e);
@@ -145,7 +177,8 @@
       x: event.clientX,
       y: event.clientY,
       items: [
-        ...(entry.isDir ? [] : [{ label: "Download", action: () => downloadEntry(entry) }, { label: "", separator: true }]),
+        { label: "Download", action: () => downloadEntry(entry) },
+        { label: "", separator: true },
         { label: "Delete", danger: true, action: () => deleteEntry(entry) },
       ],
     });
@@ -253,24 +286,22 @@
           <span class="entry-icon">{entry.isDir ? "📁" : "📄"}</span>
           <button class="entry-name" on:click={() => openEntry(entry)}>{entry.name}</button>
           <span class="entry-size">{entry.isDir ? "" : formatSize(entry.size)}</span>
-          {#if !entry.isDir}
-            {#if downloadingName === entry.name}
-              <span class="entry-action entry-action-spinner" aria-label={`Downloading ${entry.name}`} title={`Downloading ${entry.name}…`}>
-                <RingMark size={12} spinning />
-              </span>
-            {:else}
-              <span
-                class="entry-action"
-                role="button"
-                tabindex="0"
-                aria-label={`Download ${entry.name}`}
-                title={`Download ${entry.name}`}
-                on:click|stopPropagation={() => downloadEntry(entry)}
-                on:keydown|stopPropagation={(e) => e.key === "Enter" && downloadEntry(entry)}
-              >
-                ↓
-              </span>
-            {/if}
+          {#if downloadingName === entry.name}
+            <span class="entry-action entry-action-spinner" aria-label={`Downloading ${entry.name}`} title={`Downloading ${entry.name}…`}>
+              <RingMark size={12} spinning />
+            </span>
+          {:else}
+            <span
+              class="entry-action"
+              role="button"
+              tabindex="0"
+              aria-label={`Download ${entry.name}`}
+              title={`Download ${entry.name}`}
+              on:click|stopPropagation={() => downloadEntry(entry)}
+              on:keydown|stopPropagation={(e) => e.key === "Enter" && downloadEntry(entry)}
+            >
+              ↓
+            </span>
           {/if}
           <span
             class="entry-action"

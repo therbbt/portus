@@ -86,6 +86,35 @@ impl SftpClient {
         Ok(())
     }
 
+    /// Recursively mirrors a remote directory tree into a local one,
+    /// streaming each file through `download_to_file` rather than ever
+    /// holding more than one file's worth of buffered data at a time - same
+    /// reasoning as that function, just walked over every file in the tree
+    /// instead of one. Boxed/pinned because an `async fn` can't directly
+    /// call itself (the compiler would need to know its own future's size
+    /// up front, which a recursive call makes infinite) - this is the
+    /// standard way around that, not a case for pulling in a dependency
+    /// just for this one function.
+    pub fn download_dir_to<'a>(
+        &'a self,
+        remote_path: &'a str,
+        local_path: &'a std::path::Path,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), SftpError>> + Send + 'a>> {
+        Box::pin(async move {
+            tokio::fs::create_dir_all(local_path).await?;
+            for entry in self.list(remote_path).await? {
+                let remote_child = format!("{}/{}", remote_path.trim_end_matches('/'), entry.name);
+                let local_child = local_path.join(&entry.name);
+                if entry.is_dir {
+                    self.download_dir_to(&remote_child, &local_child).await?;
+                } else {
+                    self.download_to_file(&remote_child, &local_child).await?;
+                }
+            }
+            Ok(())
+        })
+    }
+
     /// Streams straight from a local file to the remote one, the upload
     /// mirror of `download_to_file` above — same reasoning applies in
     /// reverse. A byte-array upload used to buffer the whole file into a

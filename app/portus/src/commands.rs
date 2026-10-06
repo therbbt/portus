@@ -401,6 +401,19 @@ pub async fn sftp_download_file(id: String, path: String, local_path: String, st
         .map_err(|e| e.to_string())
 }
 
+/// `local_path` is the full local destination directory to mirror `path`'s
+/// contents into (SftpPanel.svelte appends the remote folder's own name to
+/// whatever directory the user picked, so this itself is never asked to
+/// invent a name) - same native-dialog reasoning as sftp_download_file.
+#[tauri::command]
+pub async fn sftp_download_dir(id: String, path: String, local_path: String, state: State<'_, SftpState>) -> Result<(), String> {
+    state
+        .get(&id)?
+        .download_dir_to(&path, std::path::Path::new(&local_path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn sftp_remove_file(id: String, path: String, state: State<'_, SftpState>) -> Result<(), String> {
     state.get(&id)?.remove_file(&path).await.map_err(|e| e.to_string())
