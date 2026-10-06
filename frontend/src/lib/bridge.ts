@@ -201,10 +201,8 @@ export interface TerminalColors {
   sshIndicator?: string | null;
   /** Overrides `--status-connected-default`, the tab/pane dot and sidebar
    * session icon color for a connected session that ISN'T SSH (shell,
-   * serial, telnet, RDP) — separate from `sshIndicator` above. Resolves to
-   * plain `--fg-secondary` (no color at all) unless set, so every non-SSH
-   * protocol reads as ordinary text unless a theme deliberately gives it
-   * its own accent. */
+   * serial, telnet, RDP) — separate from `sshIndicator` above. Defaults to
+   * the same amber `--status-connecting`/`--folder-icon-color` already use. */
   defaultIndicator?: string | null;
   /** Overrides `--surface-0`, the app's outermost background — behind the
    * sidebar, tab strip, and every panel. */
