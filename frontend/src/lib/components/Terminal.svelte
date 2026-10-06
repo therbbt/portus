@@ -19,6 +19,7 @@
     type SessionOptions,
   } from "../bridge";
   import { terminalAppearanceVersion } from "../terminalAppearance";
+  import { looksLikeSudoPasswordPrompt } from "../sudoPasswordPrompt";
   import {
     highlightTerminalOutput,
     setHighlightGreen,
@@ -59,6 +60,44 @@
   let hostKeyMismatch: { hostId: string; fingerprint: string; keyBase64: string } | null = null;
   let trustingHostKey = false;
   let trustHostKeyError: string | null = null;
+
+  // Auto-typing the saved SSH password back whenever a `sudo`-style prompt
+  // shows up, by the user's own explicit choice: this is strictly less safe
+  // than a manual "insert password" trigger would be, since it means ANY
+  // output matching this pattern gets a credential typed in response to
+  // it - a malicious or compromised remote host could print a fake prompt
+  // to get its own password typed somewhere never intended (into a file,
+  // a script's stdin, a log). Accepted knowingly in exchange for the
+  // convenience of not needing a manual step. Mitigated as far as
+  // possible without losing that convenience: only armed for an SSH
+  // session that actually connected with a real password (a key-based
+  // session has no "SSH password" to reuse at all), and rate-limited to
+  // one auto-send per detected prompt so a prompt that loops/repeats
+  // (deliberately, to harvest multiple sends, or just because sudo
+  // rejected a differing remote sudo password and reprinted it) can't
+  // spam keystrokes or hammer the remote's own lockout policy.
+  // A rolling tail of recently-written output (not the full scrollback) -
+  // needed because a prompt can arrive split across two separate `data`
+  // events at a TCP segment boundary, so testing each chunk in isolation
+  // would miss it. Capped in appendRecentOutput so it can't grow unbounded
+  // over a long session.
+  let recentOutput = "";
+  let lastAutoSentPasswordAt = 0;
+  const AUTO_SEND_COOLDOWN_MS = 3000;
+
+  function appendRecentOutput(chunk: string) {
+    recentOutput = (recentOutput + chunk).slice(-256);
+  }
+
+  function maybeAutoSendSudoPassword() {
+    if (protocol !== "ssh" || !options || !("auth" in options) || options.auth.type !== "password") return;
+    if (!looksLikeSudoPasswordPrompt(recentOutput)) return;
+    const now = Date.now();
+    if (now - lastAutoSentPasswordAt < AUTO_SEND_COOLDOWN_MS) return;
+    lastAutoSentPasswordAt = now;
+    recentOutput = "";
+    if (sessionId) void writeSession(sessionId, new TextEncoder().encode(options.auth.password + "\n"));
+  }
 
   // fit() forces a synchronous layout read, and xterm's own onResize
   // handler (below) already tells the backend when cols/rows actually
@@ -154,9 +193,13 @@
 
   function handleEvent(event: SessionEvent) {
     switch (event.type) {
-      case "data":
-        term.write(highlightTerminalOutput(decoder.decode(new Uint8Array(event.data), { stream: true })));
+      case "data": {
+        const text = decoder.decode(new Uint8Array(event.data), { stream: true });
+        term.write(highlightTerminalOutput(text));
+        appendRecentOutput(text);
+        maybeAutoSendSudoPassword();
         break;
+      }
       case "state_changed":
         dispatch("state", event.state);
         break;
@@ -188,6 +231,11 @@
   export async function reconnect() {
     await sub?.unlisten();
     decoder = new TextDecoder();
+    // A stale tail ending in a password prompt from before the disconnect
+    // could otherwise still match (the regex's trailing \s* covers a
+    // newline) the moment any new output arrives, even if nothing this
+    // session actually printed a prompt.
+    recentOutput = "";
     sessionId = newSessionId();
     // Subscribed before the session exists on the backend at all — see
     // openSession's doc comment for why a local shell needs this ordering.
