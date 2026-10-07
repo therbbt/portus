@@ -61,42 +61,61 @@
   let trustingHostKey = false;
   let trustHostKeyError: string | null = null;
 
-  // Auto-typing the saved SSH password back whenever a `sudo`-style prompt
-  // shows up, by the user's own explicit choice: this is strictly less safe
-  // than a manual "insert password" trigger would be, since it means ANY
-  // output matching this pattern gets a credential typed in response to
-  // it - a malicious or compromised remote host could print a fake prompt
-  // to get its own password typed somewhere never intended (into a file,
-  // a script's stdin, a log). Accepted knowingly in exchange for the
-  // convenience of not needing a manual step. Mitigated as far as
-  // possible without losing that convenience: only armed for an SSH
-  // session that actually connected with a real password (a key-based
-  // session has no "SSH password" to reuse at all), and rate-limited to
-  // one auto-send per detected prompt so a prompt that loops/repeats
-  // (deliberately, to harvest multiple sends, or just because sudo
-  // rejected a differing remote sudo password and reprinted it) can't
-  // spam keystrokes or hammer the remote's own lockout policy.
+  // Offering (not silently auto-typing) the saved SSH password back
+  // whenever a `sudo`-style prompt shows up, by the user's own explicit
+  // choice, matching Tabby's own take on this: detecting the prompt is
+  // still automatic (a malicious or compromised remote host could still
+  // print a fake prompt to make this trigger), but nothing is actually
+  // typed until the user presses Enter while the offer is showing - any
+  // other key cancels it and proceeds as normal, so a spoofed prompt can
+  // at most pop up a hint the user can ignore, not type a password on its
+  // own. Mitigated further the same way the first (fully-automatic) design
+  // was: only armed for an SSH session that actually connected with a
+  // real password (a key-based session has no "SSH password" to reuse at
+  // all), and rate-limited to one offer per detected prompt so a prompt
+  // that loops/repeats can't spam the hint. The offer itself also expires
+  // on its own after a while, so a stale one from a prompt long since
+  // moved past can't suddenly fire off an unrelated later Enter press.
   // A rolling tail of recently-written output (not the full scrollback) -
   // needed because a prompt can arrive split across two separate `data`
   // events at a TCP segment boundary, so testing each chunk in isolation
   // would miss it. Capped in appendRecentOutput so it can't grow unbounded
   // over a long session.
   let recentOutput = "";
-  let lastAutoSentPasswordAt = 0;
-  const AUTO_SEND_COOLDOWN_MS = 3000;
+  let lastOfferedPasswordAt = 0;
+  const OFFER_COOLDOWN_MS = 3000;
+  const OFFER_TIMEOUT_MS = 15000;
+
+  /** Non-null while the "press Enter to insert the saved password" hint is
+   * showing — holds the actual password to send, so term.onData doesn't
+   * need to re-derive it (or re-check it's still available) at keypress
+   * time. */
+  let pendingPassword: string | null = null;
+  let pendingPasswordTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function appendRecentOutput(chunk: string) {
     recentOutput = (recentOutput + chunk).slice(-256);
   }
 
-  function maybeAutoSendSudoPassword() {
+  function cancelPendingPassword() {
+    pendingPassword = null;
+    if (pendingPasswordTimeout !== null) {
+      clearTimeout(pendingPasswordTimeout);
+      pendingPasswordTimeout = null;
+    }
+  }
+
+  function maybeOfferSudoPassword() {
     if (protocol !== "ssh" || !options || !("auth" in options) || options.auth.type !== "password") return;
     if (!looksLikeSudoPasswordPrompt(recentOutput)) return;
     const now = Date.now();
-    if (now - lastAutoSentPasswordAt < AUTO_SEND_COOLDOWN_MS) return;
-    lastAutoSentPasswordAt = now;
+    if (now - lastOfferedPasswordAt < OFFER_COOLDOWN_MS) return;
+    lastOfferedPasswordAt = now;
     recentOutput = "";
-    if (sessionId) void writeSession(sessionId, new TextEncoder().encode(options.auth.password + "\n"));
+    cancelPendingPassword();
+    pendingPassword = options.auth.password;
+    pendingPasswordTimeout = setTimeout(cancelPendingPassword, OFFER_TIMEOUT_MS);
+    term.write("\r\n\x1b[33m[portus] Press Enter to insert the saved password (any other key cancels)\x1b[0m\r\n");
   }
 
   // fit() forces a synchronous layout read, and xterm's own onResize
@@ -197,7 +216,7 @@
         const text = decoder.decode(new Uint8Array(event.data), { stream: true });
         term.write(highlightTerminalOutput(text));
         appendRecentOutput(text);
-        maybeAutoSendSudoPassword();
+        maybeOfferSudoPassword();
         break;
       }
       case "state_changed":
@@ -236,6 +255,7 @@
     // newline) the moment any new output arrives, even if nothing this
     // session actually printed a prompt.
     recentOutput = "";
+    cancelPendingPassword();
     sessionId = newSessionId();
     // Subscribed before the session exists on the backend at all — see
     // openSession's doc comment for why a local shell needs this ordering.
@@ -311,6 +331,19 @@
     await openSession(sessionId, protocol, options);
 
     term.onData((data) => {
+      if (pendingPassword !== null) {
+        const password = pendingPassword;
+        cancelPendingPassword();
+        if (data === "\r") {
+          // Enter: insert the offered password instead of the keystroke
+          // itself - the remote is still sitting at the password prompt,
+          // waiting for input, so this is what actually submits it.
+          if (sessionId) void writeSession(sessionId, new TextEncoder().encode(password + "\r"));
+          return;
+        }
+        // Anything else: just cancel the offer and let this keystroke
+        // through normally, same as if nothing had been offered at all.
+      }
       if (sessionId) void writeSession(sessionId, new TextEncoder().encode(data));
     });
 
@@ -333,6 +366,7 @@
     void sub?.unlisten();
     if (sessionId) void closeSession(sessionId);
     term?.dispose();
+    cancelPendingPassword();
   });
 
   // Becoming the visible tab can reveal a stale size (it was 0x0 while
