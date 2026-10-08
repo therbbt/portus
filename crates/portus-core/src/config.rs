@@ -263,8 +263,7 @@ pub struct TerminalColors {
     /// Overrides `--status-connected-default`, the tab/pane dot and
     /// sidebar session icon color for a connected session that ISN'T SSH
     /// (shell, serial, telnet, RDP) — separate from `ssh_indicator` above.
-    /// Defaults to the same amber `status_connecting`/`folder_icon`
-    /// already use.
+    /// Defaults to plain `--fg-secondary`, same as ordinary text.
     #[serde(default)]
     pub default_indicator: Option<String>,
     /// Overrides `--surface-0`, the app's outermost background — behind

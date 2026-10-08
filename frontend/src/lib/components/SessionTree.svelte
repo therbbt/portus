@@ -481,8 +481,8 @@
   }
   .session-icon {
     flex-shrink: 0;
-    /* Amber by default — see --status-connected-default's own note in
-       tokens.css. */
+    /* Plain grey by default — see --status-connected-default's own note
+       in tokens.css. */
     color: var(--status-connected-default);
   }
   /* --status-connected, not --accent directly — this is the same "this is
