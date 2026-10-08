@@ -70,16 +70,17 @@
 
   /* A connected session that ISN'T SSH (shell, serial, telnet, RDP) used
      to always render the same four call sites above in plain --fg-secondary
-     with no override point at all — fine as long as that grey read clearly
-     as "connected, just not SSH," but a theme with its own accent family
+     with no override point at all - a theme with its own accent family
      (therbbt) had no way to give those protocols a "connected" color of
-     their own the way SSH already gets one, and the grey could end up
-     looking confusingly close to --status-disconnected. Same amber
-     --status-connecting/--folder-icon-color already use rather than
-     inventing a new hue — every protocol now reads as visibly "connected"
-     the moment it's live, even if SSH is still the only one with its own
-     distinct accent. */
-  --status-connected-default: #e8a33d;
+     their own the way SSH already gets one, so this var exists as that
+     override point. Briefly defaulted to the same amber --status-connecting
+     uses, on the theory that every protocol should read as visibly
+     "connected" - reverted back to plain grey (the original behavior) by
+     request: --status-connecting's amber should mean "connecting," full
+     stop, not also double as "connected, but not SSH." therbbt itself still
+     overrides this to its own cyan, same as before - only Default's own
+     value changed back. */
+  --status-connected-default: var(--fg-secondary);
 
   /* The sidebar's folder icon (FolderNode.svelte) — previously hardcoded
      inline, pulled out here specifically so Settings can offer it as a
@@ -276,7 +277,8 @@
     --status-connected: var(--accent);
     --status-disconnected: #8f8579;
     --status-error: #ef4444;
-    --status-connected-default: #8a5a12; /* same amber hue as --status-connecting here too */
+    /* No light-mode override needed - the :root value is a var(--fg-secondary)
+       reference, which already has its own light-mode value below. */
     --folder-icon-color: #8a5a12; /* same amber hue as --status-connecting here too */
     --highlight-green: #1e8a1e; /* same hue as the dark palette's, darkened for ~4.7:1 contrast here */
     --highlight-get: #106554; /* same teal hue as the dark palette's, darkened for contrast here */
